@@ -37,8 +37,7 @@ from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher
 from lunar_core.postprocessing.subpixel import AnalyticalSubpixelRefiner
 from lunar_core.pipeline import LunarCorePipeline
-from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
-from metrics import EvaluationReport, evaluate_registration
+from lunar_core.evaluation.metrics import EvaluationReport, evaluate_registration
 
 
 def get_sample_data_dir() -> Path:

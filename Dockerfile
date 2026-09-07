@@ -3,7 +3,7 @@
 # Multi-stage production container with GDAL, PROJ, Rasterio, and PyTorch
 # ==============================================================================
 
-FROM python:3.11-slim-bullseye AS base
+FROM python:3.11-slim-bookworm AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libproj-dev \
     libgeos-dev \
     libspatialindex-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     curl \
     git \
@@ -54,10 +54,10 @@ RUN pip install --no-cache-dir rasterio
 # 3. Copy application codebase
 COPY . /app
 
-# 4. Install ch2_lunar_reg in editable mode
+# 4. Install Samanvaya package in editable mode
 RUN pip install -e .
 
-EXPOSE 8000 8501
+EXPOSE 8501
 
-# Default command launches FastAPI REST API
-CMD ["python3", "-m", "ch2_lunar_reg.interfaces.cli", "serve", "--port", "8000"]
+# Default command launches Streamlit Web Portal
+CMD ["streamlit", "run", "app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]

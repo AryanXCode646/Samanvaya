@@ -1,0 +1,25 @@
+# SAMANVAYA PLANETARY REGISTRATION EVALUATION REPORT
+# Metric,Value,Unit
+total_matches,7,count
+inlier_count,6,count
+inlier_ratio_percent,85.71,%
+rmse_pixels,0.3706,pixels
+control_point_rmse_pixels,N/A,pixels
+spatial_uniformity_entropy,0.3753,normalized_shannon
+mean_residual_pixels,0.2126,pixels
+median_residual_pixels,0.0000,pixels
+max_residual_pixels,0.7102,pixels
+std_residual_pixels,0.3036,pixels
+ce90_pixels,0.6378,pixels
+meets_isro_mandate,True,boolean
+processing_time_ms,1187.53,ms
+#
+# TIE POINT RESIDUAL ERROR TABLE
+# TIE POINT RESIDUAL TABLE
+id,ref_x,ref_y,src_x,src_y,reprojected_ref_x,reprojected_ref_y,residual_pixels,confidence,subpixel_refined
+0,31.820,24.672,64.000,48.000,31.820,24.672,0.0000,0.3222,True
+1,38.589,16.424,72.000,40.000,38.550,16.988,0.5654,0.2801,True
+2,104.546,32.863,136.000,64.000,104.546,32.863,0.0000,0.2612,True
+3,31.790,70.339,64.816,104.567,31.804,71.049,0.7102,0.5654,True
+4,25.018,70.270,56.000,104.000,25.018,70.270,0.0000,0.2021,True
+5,105.730,198.545,144.000,232.000,105.730,198.545,0.0000,0.3294,True

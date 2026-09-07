@@ -119,7 +119,7 @@
             beforeImg.src = 'assets/proof_in_3_seconds.png';
             afterImg.src = 'assets/sample_residual_scatter.png';
             if (beforeBadge) beforeBadge.textContent = '50/50 Mosaic Checkerboard Fusion';
-            if (afterBadge) afterBadge.textContent = 'Sub-Pixel Residuals (RMSE: 0.283 px)';
+            if (afterBadge) afterBadge.textContent = 'Sub-Pixel Residuals (RMSE: 0.338 px)';
           }
         });
       });

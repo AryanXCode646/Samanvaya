@@ -1,28 +1,8 @@
 # docker-compose.yml
-# Samanvaya Containerized Microservices Stack
+# Samanvaya Containerized Portal Stack
 # ISRO Chandrayaan-2 Planetary Remote Sensing Correspondence Framework (SIH PS 26166)
 
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: samanvaya/api:latest
-    container_name: samanvaya-api
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    command: ["python3", "-m", "ch2_lunar_reg.interfaces.cli", "serve", "--port", "8000"]
-    networks:
-      - samanvaya-net
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    environment:
-      - ENVIRONMENT=production
-      - API_PORT=8000
-
   portal:
     build:
       context: .
@@ -32,11 +12,9 @@ services:
     restart: unless-stopped
     ports:
       - "8501:8501"
-    command: ["streamlit", "run", "lunar_core/ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    command: ["streamlit", "run", "app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
     networks:
       - samanvaya-net
-    depends_on:
-      - api
     security_opt:
       - no-new-privileges:true
     tmpfs:

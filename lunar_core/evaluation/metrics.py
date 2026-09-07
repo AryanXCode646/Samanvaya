@@ -56,6 +56,16 @@ class RegistrationEvaluationReport:
         return self.inlier_ratio_percent / 100.0
 
     @property
+    def spatial_uniformity_score(self) -> float:
+        """Alias for spatial_uniformity_entropy."""
+        return self.spatial_uniformity_entropy
+
+    @property
+    def transformation_matrix(self) -> Optional[List[List[float]]]:
+        """Alias for homography_matrix."""
+        return self.homography_matrix
+
+    @property
     def metrics(self) -> RegistrationMetrics:
         """Returns standard RegistrationMetrics instance for backwards compatibility."""
         return RegistrationMetrics(
@@ -135,6 +145,7 @@ class RegistrationEvaluationReport:
             f"processing_time_ms,{self.processing_time_ms:.2f},ms",
             "#",
             "# TIE POINT RESIDUAL ERROR TABLE",
+            "# TIE POINT RESIDUAL TABLE",
             "id,ref_x,ref_y,src_x,src_y,reprojected_ref_x,reprojected_ref_y,residual_pixels,confidence,subpixel_refined",
         ]
         for pt in self.tie_points:
@@ -488,3 +499,215 @@ class EvaluationEngine:
             tie_points=tie_points,
             image_shape=image_shape,
         )
+
+
+# Backwards compatibility alias
+EvaluationReport = RegistrationEvaluationReport
+
+
+def compute_inlier_stats(total_matches: int, inlier_count: int) -> Tuple[int, float]:
+    """Computes inlier count and inlier ratio percentage."""
+    ratio = EvaluationEngine.compute_inlier_ratio(inlier_count, total_matches)
+    return inlier_count, ratio
+
+
+def compute_control_points_rmse(
+    gt_ref: np.ndarray,
+    gt_src: np.ndarray,
+    transformation_matrix: np.ndarray,
+) -> float:
+    """Computes RMSE between transformed ground-truth control points and reference control points."""
+    rmse, _, _ = EvaluationEngine.compute_projective_rmse(gt_ref, gt_src, transformation_matrix)
+    return rmse
+
+
+def compute_spatial_uniformity_score(
+    kpts: np.ndarray,
+    image_shape: Tuple[int, int],
+    grid_bins: int = 8,
+) -> float:
+    """Computes spatial Shannon entropy score across grid cells."""
+    return EvaluationEngine.compute_spatial_entropy(kpts, image_shape, grid_bins)
+
+
+def compute_projective_reprojection(
+    ref_pts: np.ndarray,
+    src_pts: np.ndarray,
+    transformation_matrix: np.ndarray,
+) -> Tuple[float, np.ndarray, np.ndarray]:
+    """Computes projective reprojection RMSE, residuals, and reprojected coordinates."""
+    return EvaluationEngine.compute_projective_rmse(ref_pts, src_pts, transformation_matrix)
+
+
+def evaluate_registration(
+    tie_points: List[Dict[str, Any]],
+    transformation_matrix: Optional[np.ndarray] = None,
+    ground_truth_control_points: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    total_matches: Optional[int] = None,
+    image_shape: Tuple[int, int] = (1024, 1024),
+    processing_time_ms: float = 0.0,
+) -> RegistrationEvaluationReport:
+    """Convenience wrapper creating a RegistrationEvaluationReport from tie points and transformation."""
+    inliers = [
+        KeypointMatch(
+            ref_xy=(float(pt["ref_x"]), float(pt["ref_y"])),
+            target_xy=(float(pt["src_x"]), float(pt["src_y"])),
+            confidence=float(pt.get("confidence", 1.0)),
+            subpixel_refined=bool(pt.get("subpixel_refined", True)),
+        )
+        for pt in tie_points
+    ]
+    tot = total_matches if total_matches is not None else max(len(tie_points), 1)
+    return EvaluationEngine.generate_report(
+        total_matches=tot,
+        inliers=inliers,
+        image_shape=image_shape,
+        homography=transformation_matrix,
+        processing_time_ms=processing_time_ms,
+        ground_truth_control_points=ground_truth_control_points,
+    )
+
+
+def run_real_evaluation_benchmark(
+    json_path: Union[str, Path] = "evaluation_report.json",
+    csv_path: Union[str, Path] = "evaluation_report.csv",
+) -> RegistrationEvaluationReport:
+    """
+    Executes real registration pipeline on bundled benchmark GeoTIFF pairs:
+    - Scenario A: Chandrayaan-2 OHRC vs NASA LRO NAC (Apollo 11 Landing Site)
+    - Scenario C: Extreme Solar Lighting Disparity (Low Sun 12° vs High Sun 65°)
+    Computes authentic photogrammetric metrics and exports structured JSON and CSV reports.
+    """
+    import logging
+    import time
+    logger = logging.getLogger("samanvaya.metrics")
+    logger.info("Running Samanvaya Real Raster Evaluation Benchmark on bundled mission datasets...")
+
+    from lunar_core.pipeline import LunarCorePipeline
+    from lunar_core.models import SunAngles
+
+    # Locate sample data directory
+    data_dir = Path(__file__).resolve().parent.parent / "assets" / "sample_data"
+    if not data_dir.exists():
+        data_dir = Path.cwd() / "lunar_core" / "assets" / "sample_data"
+
+    manifest_file = data_dir / "manifest.json"
+    manifest: Dict[str, Any] = {}
+    if manifest_file.exists():
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load manifest: {e}")
+
+    def _load_tiff(filename: str) -> np.ndarray:
+        p = data_dir / filename
+        if not p.exists():
+            raise FileNotFoundError(f"Benchmark GeoTIFF not found: {p}")
+        try:
+            import rasterio
+            with rasterio.open(p) as src:
+                arr = src.read(1).astype(np.float32)
+                p_min, p_max = float(np.nanmin(arr)), float(np.nanmax(arr))
+                if p_max > p_min:
+                    return np.clip((arr - p_min) / (p_max - p_min), 0.0, 1.0)
+                return np.zeros_like(arr, dtype=np.float32)
+        except Exception:
+            import cv2
+            img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                raise ValueError(f"Failed to read image at {p}")
+            img_f = img.astype(np.float32)
+            p_min, p_max = float(np.nanmin(img_f)), float(np.nanmax(img_f))
+            if p_max > p_min:
+                return np.clip((img_f - p_min) / (p_max - p_min), 0.0, 1.0)
+            return np.zeros_like(img_f, dtype=np.float32)
+
+    from run_pipeline import run_registration_pipeline
+
+    scenarios = ["scenario_a", "scenario_c"]
+    reports = {}
+
+    for sc_id in scenarios:
+        sc_meta = manifest.get("benchmarks", {}).get(sc_id, {})
+        title = sc_meta.get("title", sc_id)
+        logger.info(f"Evaluating {title}...")
+
+        src_meta = sc_meta.get("source", {})
+        ref_meta = sc_meta.get("reference", {})
+
+        src_fn = src_meta.get("filename", f"{sc_id}_ohrc.tif")
+        ref_fn = ref_meta.get("filename", f"{sc_id}_lro_nac.tif")
+
+        # Fallback to alternate names if primary not found
+        if not (data_dir / src_fn).exists():
+            if sc_id == "scenario_a":
+                src_fn = "scenario_a_ohrc.tif"
+            elif sc_id == "scenario_c":
+                src_fn = "scenario_c_low_sun.tif"
+        if not (data_dir / ref_fn).exists():
+            if sc_id == "scenario_a":
+                ref_fn = "scenario_a_lro_nac.tif"
+            elif sc_id == "scenario_c":
+                ref_fn = "scenario_c_high_sun.tif"
+
+        src_img = _load_tiff(src_fn)
+        ref_img = _load_tiff(ref_fn)
+
+        src_sun = SunAngles(
+            azimuth_deg=src_meta.get("sun_azimuth_deg", 0.0),
+            elevation_deg=src_meta.get("sun_elevation_deg", 45.0),
+        )
+        ref_sun = SunAngles(
+            azimuth_deg=ref_meta.get("sun_azimuth_deg", 0.0),
+            elevation_deg=ref_meta.get("sun_elevation_deg", 45.0),
+        )
+
+        out_j = str(json_path) if sc_id == "scenario_a" else str(Path(json_path).parent / f"{sc_id}_report.json")
+        out_c = str(csv_path) if sc_id == "scenario_a" else str(Path(csv_path).parent / f"{sc_id}_report.csv")
+
+        rep = run_registration_pipeline(
+            src_image=src_img,
+            ref_image=ref_img,
+            src_sun=src_sun,
+            ref_sun=ref_sun,
+            photometric_mode="minnaert",
+            output_json=out_j,
+            output_csv=out_c,
+        )
+        reports[sc_id] = rep
+
+    primary_report = reports["scenario_a"]
+
+    # Print clean honest scorecard table
+    print("\n" + "=" * 78)
+    print(" SAMANVAYA ISRO SIH PS 26166 — EMPIRICAL BENCHMARK EVALUATION SCORECARD")
+    print("=" * 78)
+    print(f" {'Scenario':<28} | {'Inliers':<8} | {'Inlier%':<8} | {'RMSE (px)':<10} | {'Entropy H':<10} | {'ISRO'}")
+    print("-" * 78)
+    for sc_id, rep in reports.items():
+        sc_title = manifest.get("benchmarks", {}).get(sc_id, {}).get("title", sc_id)
+        short_title = sc_title.split(":")[0] + " " + sc_title.split("(")[-1].rstrip(")") if "(" in sc_title else sc_id
+        isro_status = "PASSED" if rep.meets_isro_mandate else "FAILED"
+        print(f" {short_title[:28]:<28} | {rep.inlier_count:<8} | {rep.inlier_ratio_percent:<7.2f}% | {rep.rmse_pixels:<10.4f} | {rep.spatial_uniformity_score:<10.4f} | {isro_status}")
+    print("=" * 78)
+    print(f" Structured Reports: {Path(json_path).resolve()} | {Path(csv_path).resolve()}\n")
+
+    return primary_report
+
+
+def run_standalone_evaluation_demo(
+    json_path: str = "evaluation_report.json",
+    csv_path: str = "evaluation_report.csv",
+) -> RegistrationEvaluationReport:
+    """Backwards-compatible alias running real benchmark evaluation."""
+    return run_real_evaluation_benchmark(json_path, csv_path)
+
+
+def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description="Samanvaya Real Evaluation Benchmark")
+    parser.add_argument("--json", default="evaluation_report.json", help="Path for output JSON report")
+    parser.add_argument("--csv", default="evaluation_report.csv", help="Path for output CSV report")
+    args = parser.parse_args()
+    run_real_evaluation_benchmark(args.json, args.csv)

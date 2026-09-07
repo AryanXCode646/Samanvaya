@@ -86,6 +86,7 @@ class PlanetaryRasterReader:
         modality: SensorModality = SensorModality.SYNTHETIC,
         gsd_fallback: float = 1.0,
         allowed_dir: Optional[Path] = None,
+        sun_angles: Optional[SunAngles] = None,
     ) -> GeoRaster:
         """
         Ingests georeferenced GeoTIFF raster and extracts spatial resolution and CRS.
@@ -124,10 +125,13 @@ class PlanetaryRasterReader:
             gsd = float((res_x + res_y) / 2.0) if (res_x > 0 and res_y > 0) else gsd_fallback
 
             # Read optional solar metadata tags
-            tags = src.tags()
-            sun_az = float(tags.get("SUN_AZIMUTH", 0.0))
-            sun_el = float(tags.get("SUN_ELEVATION", 45.0))
-            sun = SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el) if "SUN_AZIMUTH" in tags else None
+            if sun_angles is not None:
+                sun = sun_angles
+            else:
+                tags = src.tags()
+                sun_az = float(tags.get("SUN_AZIMUTH", 0.0))
+                sun_el = float(tags.get("SUN_ELEVATION", 45.0))
+                sun = SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el) if "SUN_AZIMUTH" in tags else None
 
         return GeoRaster(
             data=data,
@@ -138,6 +142,8 @@ class PlanetaryRasterReader:
             crs=crs,
             nodata_val=nodata,
         )
+
+    read_georaster = read_geotiff
 
     @staticmethod
     def parse_pds4_metadata(

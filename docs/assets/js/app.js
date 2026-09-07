@@ -103,23 +103,17 @@
     }
   }
 
-  // Live Telemetry Simulation (for showcase)
+  // Quantitative Benchmark Telemetry (Verified on Scenario A: Apollo 11)
   function initTelemetryMetrics() {
     const rmseEl = document.getElementById('live-rmse');
     const matchesEl = document.getElementById('live-matches');
     if (!rmseEl) return;
 
-    setInterval(() => {
-      // Minor realistic jitter around the 0.283 px benchmark
-      const jitter = (Math.random() - 0.5) * 0.008;
-      const val = (0.283 + jitter).toFixed(3);
-      rmseEl.textContent = `${val} px`;
-      
-      if (matchesEl) {
-        const count = 1240 + Math.floor(Math.random() * 10);
-        matchesEl.textContent = count.toLocaleString();
-      }
-    }, 3000);
+    // Static verified benchmark results measured on Scenario A (Apollo 11 OHRC vs LRO NAC)
+    rmseEl.textContent = '0.338 px';
+    if (matchesEl) {
+      matchesEl.textContent = '51';
+    }
   }
 
   // DOM ready

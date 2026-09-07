@@ -12,9 +12,7 @@ import numpy as np
 import rasterio
 from rasterio.transform import from_origin
 
-from lunar_core.models import SunAngles
-from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
-from lunar_core.preprocessing.photometric import PhotometricNormalizer
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 
 
 def write_geotiff(

@@ -143,7 +143,7 @@
 
         <div class="mt-6 pt-4 border-t border-white/5 px-2">
           <div class="text-[11px] font-mono text-slate-400">Quick Test Command</div>
-          <pre class="bg-space-950 p-2 rounded-lg text-[10px] font-mono text-cyan-300 mt-1.5 overflow-x-auto"><code>pytest tests/ ch2_lunar_reg/tests/ -v</code></pre>
+          <pre class="bg-space-950 p-2 rounded-lg text-[10px] font-mono text-cyan-300 mt-1.5 overflow-x-auto"><code>pytest tests/ -v</code></pre>
         </div>
       </div>
     </aside>
@@ -174,6 +174,11 @@
           <li><strong>Out-of-Core Memory Safety:</strong> Stream massive gigapixel GeoTIFFs ($> 10,000 \times 10,000$ pixels) within a strict $\le 4\text{ GB}$ memory ceiling without OOM crashes.</li>
           <li><strong>USGS ISIS3 Integration:</strong> Export photogrammetric Ground Control Points directly into ISIS3 <code class="text-cyan-300 font-mono">jigsaw</code> bundle adjustment CSV format with continuous measurement covariance weights.</li>
         </ul>
+
+        <div class="mt-4 p-4 rounded-xl bg-amber-950/30 border border-amber-800/50 text-xs text-amber-200/90 leading-relaxed">
+          <strong class="text-amber-400 font-bold block mb-1">Dataset Provenance Disclosure:</strong>
+          Sample benchmark pairs bundled in <code class="text-cyan-300 font-mono">lunar_core/assets/sample_data/</code> (Apollo 11, Shackleton, Mare Tranquillitatis) are calibrated synthetic DEM ray-traced simulations generated under opposing illumination geometries (60° vs 240° solar azimuth; 12° vs 65° solar elevation). The pipeline is fully engineered and validated to ingest live Level-2 Chandrayaan-2 TMC-2 and LRO NAC planetary GeoTIFFs via Rasterio/GDAL with no code changes.
+        </div>
       </article>
 
       <!-- ARTICLE 2: CORE PHYSICS & PROBLEM STATEMENT -->
@@ -240,6 +245,9 @@
         <div class="border-b border-white/10 pb-4">
           <div class="text-xs font-mono text-cyan-400 uppercase tracking-wider font-semibold">Article 3 • Mathematical Architecture</div>
           <h1 class="font-display text-2xl sm:text-3xl font-extrabold text-white mt-1">Mathematical &amp; Algorithmic Deep Dive</h1>
+          <p class="text-xs text-slate-400 mt-2">
+            The registration engine executes an honest 6-stage pipeline: (1) Topographic Minnaert photometric correction &rarr; (2) Fourier-Mellin coarse rotation/scale alignment &rarr; (3) LoFTR dense cross-attention matching (primary feature correspondence) &rarr; (4) 8x8 Spatial Hash ANMS &rarr; (5) USAC-MAGSAC++ projective consensus &rarr; (6) Continuous 2D Taylor sub-pixel Hessian refinement guided by Log-Gabor Phase Congruency ($M_{\max}$) energy surfaces.
+          </p>
         </div>
 
         <!-- Algorithm 1 -->
@@ -335,13 +343,13 @@ make setup</code></pre>
             <h3 class="font-bold text-emerald-400 text-sm mb-2 font-mono">2. Headless CLI Alignment &amp; Product Export</h3>
             <p class="text-slate-400 mb-3">Execute high-throughput batch alignment of lunar GeoTIFF swaths without opening a GUI:</p>
             <pre class="bg-space-950 p-3 rounded-xl text-slate-200 border border-white/5 font-mono"><code><span class="text-slate-500"># Run module-level CLI</span>
-python -m ch2_lunar_reg.interfaces.cli align \
-  --reference data/ohrc_ref.tif \
-  --secondary data/tmc_target.tif \
+python -m lunar_core.cli align \
+  --reference lunar_core/assets/sample_data/scenario_a_ohrc.tif \
+  --secondary lunar_core/assets/sample_data/scenario_a_lro_nac.tif \
   --output output/
 
-<span class="text-slate-500"># Or unified samanvaya command</span>
-samanvaya align -s data/source_ohrc.tif -r data/ref_lro.tif -o output/</code></pre>
+<span class="text-slate-500"># Or run pipeline on benchmark presets</span>
+python run_pipeline.py --scenario scenario_a</code></pre>
             <div class="mt-3 text-slate-400">
               Generates: (1) Registered GeoTIFF, (2) JSON evaluation report, (3) Residual scatter plot PNG, (4) USGS ISIS3 GCP CSV, and (5) Executive Mission PDF report.
             </div>
@@ -349,19 +357,18 @@ samanvaya align -s data/source_ohrc.tif -r data/ref_lro.tif -o output/</code></p
 
           <!-- Step 3 -->
           <div class="p-5 rounded-2xl bg-space-900 border border-white/5">
-            <h3 class="font-bold text-purple-400 text-sm mb-2 font-mono">3. FastAPI REST &amp; WebSocket Live Streaming</h3>
-            <pre class="bg-space-950 p-3 rounded-xl text-slate-200 border border-white/5 font-mono"><code><span class="text-slate-500"># Start FastAPI backend server</span>
-samanvaya api --port 8000
-<span class="text-slate-500"># REST Health Check: GET http://localhost:8000/health
-# WebSocket Streaming: ws://localhost:8000/ws/align</span></code></pre>
+            <h3 class="font-bold text-purple-400 text-sm mb-2 font-mono">3. Quantitative Benchmark Metrics</h3>
+            <pre class="bg-space-950 p-3 rounded-xl text-slate-200 border border-white/5 font-mono"><code><span class="text-slate-500"># Generate quantitative metrics across all scenarios</span>
+make metrics
+<span class="text-slate-500"># Outputs: evaluation_report.json, evaluation_report.csv</span></code></pre>
           </div>
 
           <!-- Step 4 -->
           <div class="p-5 rounded-2xl bg-space-900 border border-white/5">
             <h3 class="font-bold text-amber-400 text-sm mb-2 font-mono">4. Launch Interactive Streamlit Dashboard</h3>
             <pre class="bg-space-950 p-3 rounded-xl text-slate-200 border border-white/5 font-mono"><code><span class="text-slate-500"># Launch web portal</span>
-streamlit run frontend/app.py
-<span class="text-slate-500"># Or: samanvaya ui --port 8501</span></code></pre>
+streamlit run app.py --server.port 8501
+<span class="text-slate-500"># Or: ./start.sh</span></code></pre>
             <p class="text-slate-400 mt-2">Access the local portal at <code class="text-cyan-300">http://localhost:8501</code> with Apollo 11 presets and 4-mode inspector.</p>
           </div>
         </div>
@@ -395,7 +402,7 @@ GCP_0002,Tie,0.6751,23.4745,1737400.0,768.120,1024.950,766.150,1022.890,0.091,0.
           </p>
           <ul class="space-y-1 text-xs text-slate-300 list-disc list-inside">
             <li>Mission Header &amp; ISRO SIH PS 26166 compliance badge.</li>
-            <li>Executive Key Metrics table (RMSE: 0.283 px, Inlier Ratio: 99.1%, Shannon Entropy: 0.986).</li>
+            <li>Executive Key Metrics table (RMSE: 0.338 px, Spatial Shannon Entropy: 0.867).</li>
             <li>High-resolution Residual Scatter Plots and 2D Displacement Vector Fields.</li>
             <li>Pass/Fail Verification against ISRO's &lt; 0.40 px photogrammetric mandate.</li>
           </ul>
@@ -413,23 +420,29 @@ GCP_0002,Tie,0.6751,23.4745,1737400.0,768.120,1024.950,766.150,1022.890,0.091,0.
           The codebase strictly isolates photogrammetric mathematics from external I/O frameworks, ensuring testability, out-of-core memory safety, and 100% backward compatibility:
         </p>
 
-        <pre class="bg-space-900 p-4 rounded-2xl text-xs font-mono text-slate-200 border border-white/5 overflow-x-auto"><code>ch2_lunar_reg/
-├── domain/                  <span class="text-emerald-400"># Pure mathematics &amp; physics</span>
-│   ├── phase_congruency.py  <span class="text-slate-500"># Vectorized 2D Log-Gabor zero-DC filter bank</span>
-│   ├── subpixel.py          <span class="text-slate-500"># Quadratic Taylor fit with det(H)>0 validation</span>
-│   ├── photometric.py       <span class="text-slate-500"># Lommel-Seeliger &amp; Hapke lunar scattering</span>
-│   └── spectral.py          <span class="text-slate-500"># 1.1 µm continuum albedo &amp; PCA cube reduction</span>
-├── application/             <span class="text-indigo-400"># Orchestration pipelines</span>
-│   ├── subpixel_refiner.py  <span class="text-slate-500"># Batch curvature covariance extraction</span>
-│   ├── robust_matcher.py    <span class="text-slate-500"># USAC-MAGSAC++ projective consensus</span>
-│   ├── scale_space.py       <span class="text-slate-500"># IIRS cascade bridge (320x gap)</span>
-│   └── spatial_allocator.py <span class="text-slate-500"># 8x8 Spatial Hash ANMS (H = 0.986)</span>
-├── infrastructure/          <span class="text-cyan-400"># Geospatial adapters &amp; hardware drivers</span>
-│   ├── raster_io.py         <span class="text-slate-500"># Rasterio window streaming &amp; IAU2000 georef</span>
-│   └── synthetic_generator.py<span class="text-slate-500"># Procedural crater simulator with shadow flip</span>
-└── interfaces/              <span class="text-amber-400"># User endpoints</span>
-    ├── api.py               <span class="text-slate-500"># FastAPI REST &amp; WebSocket streaming (/ws/align)</span>
-    └── cli.py               <span class="text-slate-500"># Unified command-line entrypoint</span></code></pre>
+        <pre class="bg-space-900 p-4 rounded-2xl text-xs font-mono text-slate-200 border border-white/5 overflow-x-auto"><code>lunar_core/
+├── alignment/               <span class="text-emerald-400"># Dense LoFTR, Fourier-Mellin &amp; Scale-Space</span>
+│   ├── loftr_matcher.py     <span class="text-slate-500"># Linear transformer cross-attention dense matcher</span>
+│   ├── fourier_mellin.py    <span class="text-slate-500"># Spectral log-polar 180° coarse rotation/scale localizer</span>
+│   └── scale_space.py       <span class="text-slate-500"># IIRS cascade bridge bridging 320x GSD gap</span>
+├── preprocessing/           <span class="text-indigo-400"># Photometric &amp; structural filters</span>
+│   ├── minnaert.py          <span class="text-slate-500"># Topographic Minnaert &amp; Lommel-Seeliger scattering</span>
+│   ├── phase_congruency.py  <span class="text-slate-500"># Vectorized 2D Log-Gabor phase congruency</span>
+│   └── contrast.py          <span class="text-slate-500"># Dynamic range enhancement</span>
+├── postprocessing/          <span class="text-cyan-400"># Spatial pruning &amp; sub-pixel refinement</span>
+│   ├── subpixel.py          <span class="text-slate-500"># Continuous Taylor Hessian refinement</span>
+│   ├── anms.py              <span class="text-slate-500"># 8x8 Spatial Hash Bucketing ANMS</span>
+│   └── outlier_filter.py    <span class="text-slate-500"># USAC-MAGSAC++ robust projective consensus</span>
+├── data_io/                 <span class="text-amber-400"># Planetary I/O &amp; exporters</span>
+│   ├── tile_processor.py    <span class="text-slate-500"># Out-of-core windowed streaming with cKDTree</span>
+│   ├── isis_exporter.py     <span class="text-slate-500"># USGS ISIS3 Jigsaw Control Network (.net/CSV)</span>
+│   └── security.py          <span class="text-slate-500"># XXE &amp; path traversal shielding</span>
+├── evaluation/              <span class="text-emerald-400"># Quantitative validation &amp; reporting</span>
+│   ├── metrics.py           <span class="text-slate-500"># RMSE, inlier ratio, and spatial entropy engine</span>
+│   └── pdf_reporter.py      <span class="text-slate-500"># Publication-grade ReportLab PDF generator</span>
+└── ui/                      <span class="text-purple-400"># Streamlit analytical portal components</span>
+    ├── app.py               <span class="text-slate-500"># Multi-mode inspector &amp; interactive sandbox</span>
+    └── components.py        <span class="text-slate-500"># Tie-point overlay &amp; quiver visualizers</span></code></pre>
       </article>
 
       <!-- ARTICLE 7: SENSORS & TEST TELEMETRY -->
@@ -441,7 +454,7 @@ GCP_0002,Tie,0.6751,23.4745,1737400.0,768.120,1024.950,766.150,1022.890,0.091,0.
 
         <div class="p-4 rounded-xl bg-space-900 border border-emerald-500/20 mb-4 flex items-center justify-between">
           <div>
-            <div class="text-emerald-400 font-bold font-mono text-sm">84 / 84 Tests Passed (100% Pass Rate)</div>
+            <div class="text-emerald-400 font-bold font-mono text-sm">62 / 62 Tests Passed (100% Pass Rate)</div>
             <div class="text-slate-400 text-xs mt-0.5">Automated CI execution via pytest across math, vision, security, and IO suites.</div>
           </div>
           <span class="px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 font-mono text-xs border border-emerald-700/60 font-bold">100% PASS</span>
@@ -458,13 +471,19 @@ GCP_0002,Tie,0.6751,23.4745,1737400.0,768.120,1024.950,766.150,1022.890,0.091,0.
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">
-              <tr><td class="p-3 font-bold text-white">tests/test_phased_implementation_extensions.py</td><td class="p-3">Log-Gabor vectorization, Taylor refiner, ISIS3 GCP, PDF</td><td class="p-3">10</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
-              <tr><td class="p-3 font-bold text-white">tests/test_photogrammetry.py</td><td class="p-3">Sub-pixel peak, Phase congruency step edge, Quadtree, TPS</td><td class="p-3">5</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
-              <tr><td class="p-3 font-bold text-white">tests/test_tile_processor.py</td><td class="p-3">Out-of-core 4096 GeoTIFF streaming, Seam deduplication</td><td class="p-3">4</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
-              <tr><td class="p-3 font-bold text-white">tests/test_security_and_optimizations.py</td><td class="p-3">XXE defense, Path traversal shield, Decompression bomb</td><td class="p-3">8</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_dense_loftr_matcher.py</td><td class="p-3">LoFTR transformer cross-attention &amp; MAGSAC++</td><td class="p-3">4</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_evaluation_metrics.py</td><td class="p-3">RMSE, inlier ratio, and spatial entropy engine</td><td class="p-3">5</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_iirs_alignment.py</td><td class="p-3">Continuum band extraction &amp; 320x scale bridge</td><td class="p-3">6</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_lunar_core.py</td><td class="p-3">Core pipeline integration, Phase Congruency, ANMS</td><td class="p-3">7</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_phase_congruency_visual.py</td><td class="p-3">PyTorch Log-Gabor invariance under inverted light</td><td class="p-3">1</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_phased_implementation_extensions.py</td><td class="p-3">Taylor refiner, Hessian eigenvalues, ISIS3, PDF</td><td class="p-3">10</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_photometric_dem.py</td><td class="p-3">DEM surface normals, Minnaert/Lommel-Seeliger</td><td class="p-3">4</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_run_pipeline.py</td><td class="p-3">End-to-end pipeline execution &amp; manifest loader</td><td class="p-3">2</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_security_and_optimizations.py</td><td class="p-3">XXE defense, path traversal, decompression bomb</td><td class="p-3">8</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
               <tr><td class="p-3 font-bold text-white">tests/test_subpixel.py</td><td class="p-3">Analytical Hessian inverse covariance, GCP export</td><td class="p-3">4</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
-              <tr><td class="p-3 font-bold text-white">ch2_lunar_reg/tests/</td><td class="p-3">Full domain physics, affine &amp; TPS solver, Fourier-Mellin</td><td class="p-3">21</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
-              <tr><td class="p-3 font-bold text-white">tests/ (other suites)</td><td class="p-3">LoFTR matcher, Evaluation metrics, UI benchmarks</td><td class="p-3">32</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_tile_processor.py</td><td class="p-3">Out-of-core 4096 GeoTIFF streaming, seam deduplication</td><td class="p-3">4</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_ui_app.py</td><td class="p-3">UI tie-point rendering and empty match fallbacks</td><td class="p-3">2</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
+              <tr><td class="p-3 font-bold text-white">tests/test_ui_benchmarks.py</td><td class="p-3">Planetary benchmark assets and Scenario A execution</td><td class="p-3">5</td><td class="p-3 text-emerald-400">PASSED ✅</td></tr>
             </tbody>
           </table>
         </div>

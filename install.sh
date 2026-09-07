@@ -53,7 +53,7 @@ pip install -e .
 
 # Run test suite to verify installation
 echo -e "${BLUE}🧪 Running verification test suite...${NC}"
-pytest tests/ ch2_lunar_reg/tests/ -q
+pytest tests/ -q
 
 echo ""
 echo -e "${GREEN}==============================================================================${NC}"
@@ -61,10 +61,7 @@ echo -e "${GREEN}🎉 Samanvaya has been successfully installed and verified!${N
 echo -e "${GREEN}==============================================================================${NC}"
 echo ""
 echo -e "To launch the ${YELLOW}Interactive Web Portal${NC}:"
-echo -e "    ${BLUE}source venv/bin/activate && samanvaya ui${NC}   (or: ${BLUE}make run${NC})"
-echo ""
-echo -e "To launch the ${YELLOW}FastAPI REST Backend${NC}:"
-echo -e "    ${BLUE}source venv/bin/activate && samanvaya api${NC}  (or: ${BLUE}make api${NC})"
+echo -e "    ${BLUE}source venv/bin/activate && streamlit run app.py${NC}   (or: ${BLUE}make run${NC})"
 echo ""
 echo -e "To run ${YELLOW}Headless GeoTIFF Registration${NC}:"
 echo -e "    ${BLUE}samanvaya align -s source.tif -r reference.tif -o output/${NC}"

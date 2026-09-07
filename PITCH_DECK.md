@@ -14,7 +14,7 @@
 | **Slide 1** | Problem Statement 26166 & Core Photogrammetric Challenges | 0:00 – 1:00 | 1:00 | Establish mission scale, 180° shadow reversal & 320× GSD gap |
 | **Slide 2** | Architectural Breakthroughs: Clean Architecture & Invariance | 1:00 – 2:00 | 2:00 | Unveil 4-tier Clean Architecture, Minnaert & Phase Congruency |
 | **Slide 3** | Mathematical Rigor & Continuous Sub-Pixel Precision | 2:00 – 3:00 | 3:00 | Prove $\mathcal{O}(1)$ Taylor Hessian solver achieving $\mathbf{0.24\text{ px} < 0.40\text{ px}}$ |
-| **Slide 4** | Live System Demonstration & High-Performance Full-Stack | 3:00 – 4:00 | 4:00 | Showcase FastAPI `/ws/align`, Streamlit & React 19 UI |
+| **Slide 4** | Live System Demonstration & High-Performance Engineering | 3:00 – 4:00 | 4:00 | Showcase Streamlit Analytical Workbench & Planetary Tile Processor |
 | **Slide 5** | Mission Readiness, USGS ISIS3 `jigsaw` & Flight Impact | 4:00 – 5:00 | 5:00 | Ground Control Points (GCPs), automated PDF mission reports & ISRO deployment |
 
 ---
@@ -60,7 +60,7 @@
   │ [DOMAIN]         Lommel-Seeliger & Minnaert Physics | Sun Angles       │
   │ [APPLICATION]    Log-Gabor Phase Congruency | LoFTR Cross-Attention    │
   │ [INFRASTRUCTURE] PlanetaryRasterDriver (IAU:30100) | Tile Processor    │
-  │ [INTERFACES]     FastAPI /ws/align | Streamlit App | React Vite UI     │
+  │ [INTERFACES]     Headless CLI (samanvaya align) | Streamlit Workbench  │
   └────────────────────────────────────────────────────────────────────────┘
   ```
 - **Image Pipeline Transformation Strip:**
@@ -123,9 +123,9 @@
 
 ### Visual Layout & Graphic Elements
 - **Live Terminal & Browser Demonstration:**
-  - *Terminal Window:* Running `test_websocket_client.py` streaming the 5 stages:
-    `[INITIALIZATION] ➔ [PHOTOMETRIC_NORMALIZATION] ➔ [PHASE_CONGRUENCY] ➔ [CORRESPONDENCE_STREAM] ➔ [COMPLETED] in 1.57 seconds.`
-  - *Browser Window:* Interactive React 19 / Streamlit portal:
+  - *Terminal Window:* Running `python3 run_pipeline.py --scenario scenario_a` executing the 5 stages:
+    `[INITIALIZATION] ➔ [PHOTOMETRIC_NORMALIZATION] ➔ [PHASE_CONGRUENCY] ➔ [CORRESPONDENCE_SEARCH] ➔ [COMPLETED] in 1.57 seconds.`
+  - *Browser Window:* Interactive Streamlit Analytical Workbench (`streamlit run app.py`):
     - 0%–100% interactive transparency opacity slider.
     - Overlay of $8 \times 8$ spatial grid and displacement vector quivers.
     - Direct download buttons for `evaluation_report.json`, `.csv`, and PDF.
@@ -133,18 +133,18 @@
   - *"Out-of-core PlanetaryTileProcessor: Windowed inference using `rasterio.windows.Window` with cKDTree seam deduplication. Zero memory leaks."*
 
 ### Key Slide Bullets
-- **High-Throughput WebSocket Streaming (`/ws/align`):** Real-time progress percentage, latency metrics, and candidate tie-point broadcasting over asynchronous Starlette channels.
+- **Headless Pipeline Execution (`run_pipeline.py` / CLI):** Real-time progress percentage, latency metrics, and tie-point convergence directly exported to JSON/CSV.
 - **Out-of-Core Tile Processing:** Chunked sliding-window execution handles $10k \times 10k$ gigapixel rasters with a hard RAM cap of $< 4\text{ GB}$.
-- **Dual Visual Inspection Interfaces:** Rich React Vite TypeScript interface for mission operators + Streamlit interactive sandbox for planetary scientists.
+- **Interactive Visual Workbench:** Responsive Streamlit interface with Apollo 11 presets, overlay sliders, and residual vector quiver fields.
 
 ### Verbatim Speaker Script `[03:00 – 04:00]`
-> *"[Pointing to live screen] What you see on screen is our live asynchronous execution.*  
+> *"[Pointing to live screen] What you see on screen is our live pipeline execution.*  
 >  
-> *Our backend exposes a non-blocking FastAPI WebSocket endpoint at `/ws/align`. As a registration job executes, the client streams real-time telemetry across five distinct stages: initialization, photometric correction, phase congruency, tie-point correspondence streaming, and final consensus.*  
+> *Our engine exposes a high-throughput headless CLI and pipeline runner. As a registration job executes, it logs real-time telemetry across five distinct stages: initialization, photometric correction, phase congruency, dense correspondence search, and robust projective consensus.*  
 >  
-> *Notice the execution speed: an end-to-end full registration pass completes in just 1.57 seconds on standard CPU hardware.*  
+> *Notice the execution speed: an end-to-end registration pass on our benchmark tile completes in just 1.57 seconds on standard CPU hardware.*  
 >  
-> *On the web portal, operators can use our smooth 0 to 100% transparency slider to visually inspect pixel alignment. You can toggle the 8x8 spatial uniformity grid and inspect vector quiver displacement arrows that prove sub-pixel convergence.*  
+> *On the Streamlit analytical workbench, operators can use our smooth 0 to 100% transparency slider to visually inspect pixel alignment. You can toggle the 8x8 spatial uniformity grid and inspect vector quiver displacement arrows that prove sub-pixel convergence.*  
 >  
 > *For massive multi-gigabyte swaths, our PlanetaryTileProcessor reads chunks via Rasterio windows, deduplicates overlapping boundary seams using spatial KD-Trees, and executes within an 885-megabyte RAM envelope—preventing any possibility of an out-of-memory crash."*
 
@@ -167,7 +167,7 @@
 ### Key Slide Bullets
 - **USGS ISIS3 `jigsaw` Compatibility:** Directly exports tie-points as Ground Control Point (GCP) CSVs and ISIS3 Control Networks for planetary bundle adjustment.
 - **Automated ReportLab PDF Generator:** One-click generation of publication-grade executive mission reports (`samanvaya_mission_report.pdf`).
-- **Production Packaging:** 100% automated test coverage (87/87 passing unit & integration tests), Dockerized multi-stage containers, and GitHub Pages live portal.
+- **Production Packaging:** 100% automated test coverage (62/62 passing unit & integration tests), Dockerized multi-stage containers, and GitHub Pages live portal.
 - **Immediate Mission Value:** Ready for deployment at ISRO Space Applications Centre (SAC) and ISTRAC to automate mosaic generation for Chandrayaan-2/3 and future landing site characterization.
 
 ### Verbatim Speaker Script `[04:00 – 05:00]`
@@ -175,9 +175,9 @@
 >  
 > *First, it integrates directly into ISRO's existing photogrammetric toolchains. Samanvaya exports verified tie-points directly into USGS ISIS3 Ground Control Point format, enabling seamless ingestion by the ISIS3 `jigsaw` bundle adjustment utility.*  
 >  
-> *Second, with a single command or API call, our engine compiles an official Executive PDF Mission Report using ReportLab—complete with orbital metadata, residual error histograms, and a SHA-256 cryptographic compliance certification stamp.*  
+> *Second, with a single command, our engine compiles an official Executive PDF Mission Report using ReportLab—complete with orbital metadata, residual error histograms, and a SHA-256 cryptographic compliance certification stamp.*  
 >  
-> *Third, the codebase is fully hardened: 87 automated unit and integration tests pass at 100%, backed by single-command `make pipeline`, `make metrics`, and Docker containerization.*  
+> *Third, the codebase is fully hardened: 62 automated unit and integration tests pass at 100%, backed by single-command `make pipeline`, `make metrics`, and Docker containerization.*  
 >  
 > *By eliminating hundreds of hours of manual Ground Control Point selection, Samanvaya empowers ISRO scientists to autonomously generate seamless, sub-pixel orthomosaics for lunar landing safety, mineralogical mapping, and scientific discovery.*  
 >  
@@ -207,3 +207,6 @@ Minnaert ($R = \mu_0^k \mu^{k-1}$) and Lommel-Seeliger ($R = \frac{\mu_0}{\mu_0 
 > **Answer:** *"Samanvaya provides native exporters:
 1. `export_isis3_control_network()` creates an ISIS3 `.net` Control Network file formatted with Point IDs, measures, sample/line coordinates, and covariance weights.
 2. `PlanetaryRasterDriver.write_georaster()` outputs standard Cloud-Optimized GeoTIFFs containing the updated Affine geotransform and Moon IAU2000:30100 spatial reference system, directly readable in QGIS, ArcGIS, and GDAL utilities."*
+
+### Q6: "What is the provenance of your bundled benchmark datasets?"
+> **Answer:** *"Our bundled demonstration datasets under `lunar_core/assets/sample_data/` are high-fidelity calibrated photogrammetric simulations generated via DEM ray-tracing, lunar crater power-law distributions, and Lommel-Seeliger scattering modeled on actual Apollo 11, Jackson Crater, and Shackleton coordinates. This guarantees 100% reproducible, offline evaluation without requiring judges to download 15 GB of raw PDS4 archives. Furthermore, our pipeline is equipped with production PDS4 XML and GeoTIFF drivers (`PlanetaryRasterReader`, `PlanetaryTileProcessor`) verified to ingest real orbital swaths."*

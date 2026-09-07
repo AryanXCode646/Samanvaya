@@ -108,7 +108,7 @@
     <!-- Top Mission Badges -->
     <div class="flex flex-wrap items-center justify-center gap-2 mb-6">
       <span class="px-3 py-1 rounded-full cosmic-pill text-cyan-300 text-xs font-mono font-medium">🛰️ ISRO Chandrayaan-2 Planetary Remote Sensing</span>
-      <span class="px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 text-xs font-mono font-medium">🎯 Sub-Pixel Precision: 0.283 px</span>
+      <span class="px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 text-xs font-mono font-medium">🎯 Sub-Pixel Precision: 0.338 px</span>
       <span class="px-3 py-1 rounded-full bg-indigo-950/70 border border-indigo-700/60 text-indigo-300 text-xs font-mono font-medium">⚡ 320× Multi-Scale Hierarchy</span>
     </div>
 
@@ -120,7 +120,7 @@
     <!-- Subtitle -->
     <p class="mt-6 text-sm sm:text-lg text-slate-300 max-w-3xl mx-auto leading-relaxed font-normal">
       On the Moon, razor-sharp shadows invert completely between morning ($Az: 60^\circ$) and afternoon ($Az: 240^\circ$) orbits ($\rho_{\text{raw}} = -0.9627$).
-      <strong class="text-white">Samanvaya</strong> isolates illumination-invariant structural step edges using <strong>Vectorized 2D Log-Gabor Phase Congruency</strong> and <strong>Linear Transformer Cross-Attention</strong>, achieving an empirical <strong class="text-emerald-400 font-mono">0.283 px RMSE</strong> surpassing ISRO&#39;s <strong class="text-cyan-300 font-mono">&lt; 0.40 px mandate</strong> across massive gigapixel swaths.
+      <strong class="text-white">Samanvaya</strong> isolates illumination-invariant structural step edges using <strong>Vectorized 2D Log-Gabor Phase Congruency</strong> and <strong>Linear Transformer Cross-Attention</strong>, achieving an empirical <strong class="text-emerald-400 font-mono">0.338 px RMSE</strong> surpassing ISRO&#39;s <strong class="text-cyan-300 font-mono">&lt; 0.40 px mandate</strong> across massive gigapixel swaths.
     </p>
 
     <!-- Verified Badges Row -->
@@ -130,7 +130,7 @@
       <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch 2.0+" class="h-6" />
       <img src="https://img.shields.io/badge/Kornia-0.8-10b981?style=flat-square" alt="Kornia 0.8" class="h-6" />
       <img src="https://img.shields.io/badge/GDAL%20%2F%20Rasterio-1.3%2B-2563eb?style=flat-square&logo=qgis&logoColor=white" alt="GDAL / Rasterio" class="h-6" />
-      <img src="https://img.shields.io/badge/Tests-100%25%20Passed%20(84%2F84)-emerald?style=flat-square&logo=pytest&logoColor=white" alt="84/84 Tests Passed" class="h-6" />
+      <img src="https://img.shields.io/badge/Tests-100%25%20Passed%20(62%2F62)-emerald?style=flat-square&logo=pytest&logoColor=white" alt="62/62 Tests Passed" class="h-6" />
       <img src="https://img.shields.io/badge/Security-XXE%20%26%20Decompression%20Shielded-blueviolet?style=flat-square" alt="Security Hardened" class="h-6" />
       <img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="MIT License" class="h-6" />
     </div>
@@ -158,8 +158,8 @@
           <div class="text-[11px] font-mono uppercase text-slate-400">Sub-Pixel Precision</div>
           <span class="telemetry-indicator"></span>
         </div>
-        <div id="live-rmse" class="text-3xl font-black text-emerald-400 font-mono mt-1">0.283 px</div>
-        <div class="text-[11px] text-emerald-400/90 mt-1 font-medium">🎯 Target &lt; 0.40 px [PASS]</div>
+        <div id="live-rmse" class="text-3xl font-black text-emerald-400 font-mono mt-1">0.338 px</div>
+        <div class="text-[11px] text-emerald-400/90 mt-1 font-medium">🎯 Target &lt; 0.40 px [PASS] • Apollo 11</div>
       </div>
 
       <div class="glass-card p-5 rounded-2xl border-l-4 border-l-cyan-500">
@@ -245,7 +245,7 @@
       </div>
       <div class="bg-space-900/80 p-4 rounded-xl border border-white/5">
         <span class="text-cyan-400 font-bold block mb-1">3. Sub-Pixel Parabolic Refinement</span>
-        Strict negative-definite Hessian validation guarantees sub-pixel convergence (<strong class="text-cyan-300">RMSE: 0.283 px &lt; 0.40 px</strong>), ready for USGS ISIS3 bundle adjustment.
+        Strict negative-definite Hessian validation guarantees sub-pixel convergence (<strong class="text-cyan-300">RMSE: 0.338 px &lt; 0.40 px</strong>), ready for USGS ISIS3 bundle adjustment.
       </div>
     </div>
   </section>
@@ -280,7 +280,7 @@
               <td class="p-4 sm:p-5 font-bold text-white">Sub-Pixel Precision (RMSE)</td>
               <td class="p-4 sm:p-5 text-rose-400">&gt; 5.20 px (Fails)</td>
               <td class="p-4 sm:p-5 text-amber-400">0.850 px</td>
-              <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-cyan-950/20 text-sm">0.283 px</td>
+              <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-cyan-950/20 text-sm">0.338 px</td>
               <td class="p-4 sm:p-5 font-bold text-cyan-300">&lt; 0.400 px</td>
               <td class="p-4 sm:p-5 text-center"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-700/60 font-bold">PASSED ✅</span></td>
             </tr>
@@ -328,7 +328,7 @@
               <td class="p-4 sm:p-5 font-bold text-white">Automated Test Telemetry</td>
               <td class="p-4 sm:p-5 text-slate-500">None</td>
               <td class="p-4 sm:p-5 text-amber-400">Partial</td>
-              <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-cyan-950/20 text-sm">84 / 84 Tests (100% Passed)</td>
+              <td class="p-4 sm:p-5 text-emerald-400 font-bold bg-cyan-950/20 text-sm">62 / 62 Tests (100% Passed)</td>
               <td class="p-4 sm:p-5 text-slate-400">Zero Regressions</td>
               <td class="p-4 sm:p-5 text-center"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-700/60 font-bold">PASSED ✅</span></td>
             </tr>
@@ -417,13 +417,13 @@
           </div>
           <h3 class="font-bold text-white text-base mb-2">Mission Products &amp; APIs</h3>
           <p class="text-xs text-slate-400 leading-relaxed mb-4">
-            Unified headless CLI (<code class="text-cyan-300 font-mono">samanvaya align</code>), asynchronous FastAPI REST and WebSocket streaming (<code class="text-cyan-300 font-mono">/ws/align</code>), USGS ISIS3 GCP export, and ReportLab PDF reporting.
+            Unified headless CLI (<code class="text-cyan-300 font-mono">samanvaya align</code>), USGS ISIS3 GCP export, and automated ReportLab PDF mission reporting.
           </p>
         </div>
         <ul class="space-y-1.5 text-[11px] font-mono text-slate-300 border-t border-white/5 pt-4">
           <li>✔ USGS ISIS3 Jigsaw CSV</li>
           <li>✔ ReportLab PDF Generator</li>
-          <li>✔ Streamlit Dashboard (app.py)</li>
+          <li>✔ Streamlit Analytical Workbench (app.py)</li>
         </ul>
       </div>
     </div>
@@ -449,14 +449,13 @@ cd Samanvaya
 ./start.sh   <span class="text-slate-500"># For Windows PowerShell: .\start.ps1</span>
 
 <span class="text-slate-500"># 2. Launch Interactive Streamlit Dashboard</span>
-streamlit run frontend/app.py
-<span class="text-slate-500"># Or: samanvaya ui --port 8501</span>
+streamlit run app.py --server.port 8501
 
 <span class="text-slate-500"># 3. Headless CLI Alignment & USGS ISIS3 GCP Export</span>
-python -m ch2_lunar_reg.interfaces.cli align --reference data/ohrc_ref.tif --secondary data/tmc_target.tif
+python -m lunar_core.cli align --reference lunar_core/assets/sample_data/scenario_a_ohrc.tif --secondary lunar_core/assets/sample_data/scenario_a_lro_nac.tif
 
-<span class="text-slate-500"># 4. Execute Full Verification Test Suite (84 Tests)</span>
-pytest tests/ ch2_lunar_reg/tests/ -v --maxfail=1</code></pre>
+<span class="text-slate-500"># 4. Execute Full Verification Test Suite (62 Tests)</span>
+pytest tests/ -v --maxfail=1</code></pre>
     </div>
   </section>
 

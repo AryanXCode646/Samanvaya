@@ -36,7 +36,7 @@ from lunar_core.models import SensorModality, SunAngles
 from lunar_core.data_io.raster_reader import PlanetaryRasterReader
 from lunar_core.data_io.raster_writer import PlanetaryRasterWriter
 from lunar_core.data_io.tile_processor import PlanetaryTileProcessor, TileProcessingResult
-from metrics import EvaluationReport, evaluate_registration
+from lunar_core.evaluation.metrics import EvaluationReport, evaluate_registration
 
 logging.basicConfig(
     level=logging.INFO,

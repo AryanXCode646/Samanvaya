@@ -1,62 +1,20 @@
-#!/usr/bin/env pwsh
-<#
-.SYNOPSIS
-  Samanvaya - One-Command Full-Stack Launcher (Windows)
-  Starts all 4 microservices in parallel and opens the browser.
+# Samanvaya — Windows PowerShell Launcher
+# Usage: .\start.ps1
 
-.USAGE
-  .\start.ps1
-#>
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host ""
-Write-Host "  * Samanvaya (Samanvaya) - Full-Stack Launcher" -ForegroundColor Cyan
-Write-Host "  ===============================================" -ForegroundColor DarkCyan
-Write-Host "  [ML]   ML FastAPI        -> http://localhost:8001" -ForegroundColor Yellow
-Write-Host "  [CORE] Core Reg API      -> http://localhost:8000" -ForegroundColor Cyan
-Write-Host "  [GATE] Node.js Gateway   -> http://localhost:3000" -ForegroundColor Magenta
-Write-Host "  [UI]   React Dashboard   -> http://localhost:5173" -ForegroundColor Green
+Write-Host "  🌙 Samanvaya (समान्वय) — Web Portal Launcher" -ForegroundColor Cyan
+Write-Host "  ═══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  🚀  Streamlit Portal → http://localhost:8501" -ForegroundColor Green
 Write-Host ""
 
-$root = $PSScriptRoot
+$py = "python"
+if (Test-Path "$root\.venv\Scripts\python.exe") {
+  $py = "$root\.venv\Scripts\python.exe"
+} elseif (Test-Path "$root\venv\Scripts\python.exe") {
+  $py = "$root\venv\Scripts\python.exe"
+}
 
-$py = if (Test-Path "$root\.venv\Scripts\python.exe") { "$root\.venv\Scripts\python.exe" } elseif (Test-Path "$root\venv\Scripts\python.exe") { "$root\venv\Scripts\python.exe" } else { "python" }
-
-# 1. Python ML Service
-Write-Host "[1/4] Launching ML Microservice (FastAPI)..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command",
-  "Set-Location '$root\ml_service'; & '$py' -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
-
-Start-Sleep -Seconds 1
-
-# 2. Samanvaya Core Registration API
-Write-Host "[2/4] Launching Samanvaya Core Registration API..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command",
-  "Set-Location '$root'; & '$py' -m uvicorn ch2_lunar_reg.interfaces.api:app --host 0.0.0.0 --port 8000 --reload"
-
-Start-Sleep -Seconds 1
-
-# 3. Node.js Gateway
-Write-Host "[3/4] Launching Node.js Zero-Trust Gateway..." -ForegroundColor Magenta
-Start-Process powershell -ArgumentList "-NoExit", "-Command",
-  "Set-Location '$root\backend'; npx tsx src/index.ts"
-
-Start-Sleep -Seconds 1
-
-# 4. React Vite Frontend
-Write-Host "[4/4] Launching React Dashboard (Vite)..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command",
-  "Set-Location '$root\frontend'; npm run dev"
-
-# Open browser after compile time
-Write-Host ""
-Write-Host "  Waiting for Vite to compile (5s)..." -ForegroundColor DarkGray
-Start-Sleep -Seconds 5
-Start-Process "http://localhost:5173"
-
-Write-Host ""
-Write-Host "  [OK] All services running! Close the 4 terminal windows to stop." -ForegroundColor Green
-Write-Host ""
-Write-Host "  Quick test:" -ForegroundColor White
-Write-Host "  curl http://localhost:8001/" -ForegroundColor DarkGray
-Write-Host "  curl http://localhost:8000/docs" -ForegroundColor DarkGray
-Write-Host "  curl http://localhost:3000/" -ForegroundColor DarkGray
+Write-Host "Starting Samanvaya Streamlit Portal..." -ForegroundColor Green
+& $py -m streamlit run "$root\app.py" --server.port 8501
