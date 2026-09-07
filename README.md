@@ -183,7 +183,9 @@ pip install -e .
 ```
 - **Streamlit Analytical Workbench:** [http://localhost:8501](http://localhost:8501)
 - **Headless Pipeline Execution:** `make pipeline` or `python3 run_pipeline.py --scenario scenario_a`
-- **Quantitative Benchmark Metrics:** `make metrics`
+- **Quantitative Benchmark Metrics:** `make metrics` or `python3 metrics.py`
+- **Real Raster Verification:** `make verify-raster` or `python3 verify_raster_run.py --scenario scenario_a`
+- **Executive PDF Mission Report:** `make report-pdf` or `python3 pdf_reporter.py`
 
 ---
 
@@ -211,12 +213,14 @@ Generates a publication-quality executive PDF complete with the official ISRO SI
 
 ### 4. End-to-End Headless CLI Alignment
 ```bash
-python3 -m lunar_core.cli align \
-  --reference lunar_core/assets/sample_data/scenario_a_ohrc.tif \
-  --secondary lunar_core/assets/sample_data/scenario_a_lro_nac.tif \
+# Direct CLI execution on sample GeoTIFFs
+samanvaya align \
+  --source lunar_core/assets/sample_data/scenario_a_ohrc_apollo11.tif \
+  --reference lunar_core/assets/sample_data/scenario_a_lronac_apollo11.tif \
   --output output/
 ```
 Executes complete 5-stage alignment progression (`INITIALIZATION` $\to$ `PHOTOMETRIC_NORMALIZATION` $\to$ `PHASE_CONGRUENCY` $\to$ `CORRESPONDENCE_SEARCH` $\to$ `COMPLETED`) with telemetry, export of ISIS3 GCPs, and verified inlier tie-points.
+
 
 ---
 

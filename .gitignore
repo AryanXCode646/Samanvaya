@@ -14,8 +14,6 @@ venv/
 .venv/
 env/
 ENV/
-ml_service/venv/
-antigravity_ai/venv/
 
 # --- Distribution & Packaging ---
 build/
@@ -74,7 +72,6 @@ tests/*.json
 *.ckpt
 *.pth
 *.pt
-data/isolation_forest.joblib
 
 # --- Node ---
 node_modules/
