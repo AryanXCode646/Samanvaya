@@ -32,8 +32,9 @@ import numpy as np
 import rasterio
 
 # Project Imports
-from ch2_lunar_reg.domain.models import SensorModality, SunAngles
-from ch2_lunar_reg.infrastructure.raster_io import PlanetaryRasterDriver
+from lunar_core.models import SensorModality, SunAngles
+from lunar_core.data_io.raster_reader import PlanetaryRasterReader
+from lunar_core.data_io.raster_writer import PlanetaryRasterWriter
 from lunar_core.data_io.tile_processor import PlanetaryTileProcessor, TileProcessingResult
 from metrics import EvaluationReport, evaluate_registration
 
@@ -105,7 +106,7 @@ def run_raster_verification(
 
     # 1. Inspect and Read Geospatial Headers via PlanetaryRasterDriver
     logger.info(f"Ingesting Master Reference GeoTIFF: {ref_raster_path}")
-    ref_geo = PlanetaryRasterDriver.read_georaster(
+    ref_geo = PlanetaryRasterReader.read_georaster(
         ref_raster_path,
         modality=SensorModality.LRO_NAC,
         sun_angles=SunAngles(azimuth_deg=85.0, elevation_deg=33.5),
@@ -116,7 +117,7 @@ def run_raster_verification(
     )
 
     logger.info(f"Ingesting Moving Target GeoTIFF: {src_raster_path}")
-    src_geo = PlanetaryRasterDriver.read_georaster(
+    src_geo = PlanetaryRasterReader.read_georaster(
         src_raster_path,
         modality=SensorModality.OHRC,
         sun_angles=SunAngles(azimuth_deg=72.5, elevation_deg=28.0),
@@ -205,7 +206,7 @@ def run_raster_verification(
             (w_ref, h_ref),
             flags=cv2.INTER_LINEAR,
         )
-        PlanetaryRasterDriver.write_georaster(
+        PlanetaryRasterWriter.write_georaster(
             output_path=output_warped_tif,
             data=warped_img,
             reference_raster=ref_geo,

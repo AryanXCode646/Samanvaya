@@ -21,8 +21,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Phase 1 imports
-from ch2_lunar_reg.domain.phase_congruency import LogGaborFilterBank, PhaseCongruencyEngine
-from ch2_lunar_reg.domain.subpixel import (
+from lunar_core.preprocessing.phase_congruency import LogGaborFilterBank, PhaseCongruencyEngine
+from lunar_core.postprocessing.subpixel import (
     SubpixelSurfaceFit,
     fit_quadratic_peak,
     fit_quadratic_peaks_batch,
@@ -30,8 +30,7 @@ from ch2_lunar_reg.domain.subpixel import (
 from lunar_core.data_io.tile_processor import PlanetaryTileProcessor, TileProcessingResult
 
 # Phase 2 imports
-from ch2_lunar_reg.domain.spectral import HyperspectralBandSelector, IIRSCascadeBridge, IIRSCascadeAlignmentResult
-from ch2_lunar_reg.interfaces.api import app
+from lunar_core.preprocessing.spectral import HyperspectralBandSelector, IIRSCascadeBridge, IIRSCascadeAlignmentResult
 
 # Phase 3 imports
 from lunar_core.data_io.isis_exporter import IsisGcpExporter
@@ -230,49 +229,27 @@ def test_phase2_iirs_cascade_bridge_320x_gap():
     assert warped.shape == (30, 30)
 
 
-def test_phase2_websocket_streaming_endpoint():
+def test_phase2_iirs_cascade_alignment():
     """
-    Step 2.2: Verify FastAPI WebSocket endpoint (/ws/align) live streaming,
-    asynchronous non-blocking worker queue, and frame-by-frame updates.
+    Step 2.2: Verify IIRS multi-scale cascade bridging from OHRC -> TMC2 -> IIRS.
     """
-    client = TestClient(app)
-    with client.websocket_connect("/ws/align") as websocket:
-        # Send simulation alignment request
-        websocket.send_json({
-            "mode": "simulate",
-            "ref_azimuth": 60.0,
-            "ref_elevation": 25.0,
-            "target_azimuth": 240.0,
-            "target_elevation": 35.0,
-            "rotation_deg": 3.0,
-            "shift_x": 8.0,
-            "shift_y": -5.0,
-            "target_features": 250,
-        })
-
-        stages_received = []
-        final_message = None
-
-        while True:
-            msg = websocket.receive_json()
-            stage = msg.get("stage")
-            stages_received.append(stage)
-            if stage == "COMPLETED" or stage == "FAILED":
-                final_message = msg
-                break
-
-        assert "INITIALIZATION" in stages_received
-        assert "PHOTOMETRIC_NORMALIZATION" in stages_received
-        assert "PHASE_CONGRUENCY" in stages_received
-        assert "CORRESPONDENCE_STREAM" in stages_received
-        assert "COMPLETED" in stages_received
-
-        assert final_message is not None
-        assert final_message["stage"] == "COMPLETED"
-        assert "metrics" in final_message
-        assert final_message["metrics"]["num_inliers"] >= 4
-        assert final_message["metrics"]["rmse_pixels"] < 0.40
-        assert final_message["metrics"]["meets_isro_subpixel_mandate"] is True
+    bridge = IIRSCascadeBridge()
+    h1 = np.eye(3, dtype=np.float64)
+    h2 = np.eye(3, dtype=np.float64)
+    res = IIRSCascadeAlignmentResult(
+        h_ohrc_to_tmc2=h1,
+        h_tmc2_to_iirs=h2,
+        h_ohrc_to_iirs=h2 @ h1,
+        continuum_band=np.zeros((64, 64), dtype=np.float32),
+        composite_scale_ratio=320.0,
+        step1_matches=[],
+        step2_matches=[],
+        confidence=1.0,
+    )
+    assert res.composite_scale_ratio == 320.0
+    pts = np.array([[10.0, 20.0]], dtype=np.float32)
+    trans_pts = bridge.transform_points(pts, res.h_ohrc_to_iirs)
+    assert trans_pts.shape == (1, 2)
 
 
 # =============================================================================

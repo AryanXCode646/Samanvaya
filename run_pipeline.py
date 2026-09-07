@@ -30,16 +30,14 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("samanvaya.pipeline_harness")
 
-# Core imports
 from lunar_core.models import KeypointMatch, SunAngles, TransformationType
 from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.preprocessing.contrast import DynamicContrastEqualizer
 from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher
 from lunar_core.postprocessing.subpixel import AnalyticalSubpixelRefiner
-from ch2_lunar_reg.domain.models import TransformationModel
-from ch2_lunar_reg.application.pipeline import LunarRegistrationPipeline
-from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
+from lunar_core.pipeline import LunarCorePipeline
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 from metrics import EvaluationReport, evaluate_registration
 
 
@@ -316,13 +314,12 @@ def main() -> None:
         gt_ref_h = np.hstack([gt_ref, np.ones((len(gt_ref), 1))])
         gt_tgt = (true_affine @ gt_ref_h.T).T
 
-        logger.info("Executing LunarRegistrationPipeline with 2D Log-Gabor Phase Congruency & Sub-Pixel Taylor Refinement...")
-        pipeline = LunarRegistrationPipeline(
-            target_features=300,
-            enable_photometric_norm=(args.photometric != "none"),
+        logger.info("Executing LunarCorePipeline with 2D Log-Gabor Phase Congruency & Sub-Pixel Taylor Refinement...")
+        pipeline = LunarCorePipeline(
+            transformation_type=TransformationType.AFFINE,
+            enable_photometric=(args.photometric != "none"),
             enable_anms=True,
             enable_subpixel=True,
-            transformation_model=TransformationModel.AFFINE,
         )
         t_start = time.perf_counter()
         res = pipeline.register(ref_img, src_img, sun_ref, sun_src)

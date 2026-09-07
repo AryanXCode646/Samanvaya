@@ -36,13 +36,12 @@ test = [
 
 [project.scripts]
 samanvaya = "lunar_core.cli:main"
-ch2-reg = "ch2_lunar_reg.interfaces.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lunar_core*", "ch2_lunar_reg*", "src*"]
+include = ["lunar_core*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests", "ch2_lunar_reg/tests"]
+testpaths = ["tests"]
 

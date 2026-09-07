@@ -53,6 +53,8 @@ class PlanetaryRasterWriter:
         with rasterio.open(str(out_path), "w", **profile) as dst:
             dst.write(data.astype(np.float32), 1)
 
+    write_georaster = write_geotiff
+
     @staticmethod
     def export_gcp_csv(
         matches: List[KeypointMatch],

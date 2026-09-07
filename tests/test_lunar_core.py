@@ -32,7 +32,7 @@ from lunar_core.postprocessing import (
     RobustEstimator,
 )
 from lunar_core.evaluation import EvaluationEngine
-from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 
 
 def test_preprocessing_phase_congruency():

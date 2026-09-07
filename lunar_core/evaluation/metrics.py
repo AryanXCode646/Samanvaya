@@ -51,6 +51,11 @@ class RegistrationEvaluationReport:
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
+    def inlier_ratio(self) -> float:
+        """Returns inlier ratio in [0, 1]."""
+        return self.inlier_ratio_percent / 100.0
+
+    @property
     def metrics(self) -> RegistrationMetrics:
         """Returns standard RegistrationMetrics instance for backwards compatibility."""
         return RegistrationMetrics(

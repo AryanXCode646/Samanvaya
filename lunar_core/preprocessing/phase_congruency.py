@@ -58,6 +58,101 @@ def get_optimal_hardware_device(requested_device: Optional[Union[str, torch.devi
     return torch.device("cpu")
 
 
+class LogGaborFilterBank:
+    """
+    2D Log-Gabor wavelet filter bank constructed in frequency space.
+    Eliminates DC component entirely, preventing low-frequency illumination bias.
+    """
+
+    def __init__(
+        self,
+        num_scales: int = 4,
+        num_orientations: int = 6,
+        min_wavelength: float = 3.0,
+        mult: float = 2.1,
+        sigma_on_f: float = 0.55,
+        d_theta_on_sigma: float = 1.2,
+    ) -> None:
+        self.num_scales = num_scales
+        self.num_orientations = num_orientations
+        self.min_wavelength = min_wavelength
+        self.mult = mult
+        self.sigma_on_f = sigma_on_f
+        self.d_theta_on_sigma = d_theta_on_sigma
+        self._filter_cache: dict = {}
+        self._tensor_filter_cache: dict = {}
+        self._grid_cache: dict = {}
+
+    def get_frequency_grids(
+        self, rows: int, cols: int
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        cache_key = (rows, cols)
+        if cache_key in self._grid_cache:
+            return self._grid_cache[cache_key]
+
+        u = np.linspace(-0.5, 0.5, cols, endpoint=False, dtype=np.float32)
+        v = np.linspace(-0.5, 0.5, rows, endpoint=False, dtype=np.float32)
+        x, y = np.meshgrid(u, v)
+
+        x = np.fft.ifftshift(x)
+        y = np.fft.ifftshift(y)
+
+        radius = np.sqrt(x**2 + y**2).astype(np.float32)
+        theta = np.arctan2(-y, x).astype(np.float32)
+        radius[0, 0] = 1.0
+
+        grids = (x, y, radius, theta)
+        self._grid_cache[cache_key] = grids
+        return grids
+
+    def build_filters_tensor(self, rows: int, cols: int) -> np.ndarray:
+        cache_key = (rows, cols)
+        if cache_key in self._tensor_filter_cache:
+            return self._tensor_filter_cache[cache_key]
+
+        _, _, radius, theta = self.get_frequency_grids(rows, cols)
+        theta_sigma = float(np.pi / self.num_orientations / self.d_theta_on_sigma)
+
+        ang = (
+            np.arange(self.num_orientations, dtype=np.float32)
+            * (np.pi / self.num_orientations)
+        ).reshape(-1, 1, 1)
+
+        diff_theta1 = np.abs(theta[None, :, :] - ang)
+        diff_theta1 = np.minimum(diff_theta1, 2.0 * np.pi - diff_theta1)
+        diff_theta2 = np.abs(theta[None, :, :] - (ang + np.pi))
+        diff_theta2 = np.minimum(diff_theta2, 2.0 * np.pi - diff_theta2)
+        diff_theta = np.minimum(diff_theta1, diff_theta2)
+        spread = np.exp(-(diff_theta**2) / (2.0 * theta_sigma**2)).astype(np.float32)
+
+        s_idx = np.arange(self.num_scales, dtype=np.float32).reshape(-1, 1, 1)
+        wavelength = (self.min_wavelength * (self.mult**s_idx)).astype(np.float32)
+        f0 = 1.0 / wavelength
+
+        log_rad = np.log(radius[None, :, :] / f0)
+        radial = np.exp(
+            -(log_rad**2) / (2.0 * (np.log(self.sigma_on_f)) ** 2)
+        ).astype(np.float32)
+        radial[:, 0, 0] = 0.0
+
+        filters_4d = (spread[:, None, :, :] * radial[None, :, :, :]).astype(np.float32)
+        self._tensor_filter_cache[cache_key] = filters_4d
+        return filters_4d
+
+    def build_filters(self, rows: int, cols: int) -> List[List[np.ndarray]]:
+        cache_key = (rows, cols)
+        if cache_key in self._filter_cache:
+            return self._filter_cache[cache_key]
+
+        tensor_filters = self.build_filters_tensor(rows, cols)
+        filters: List[List[np.ndarray]] = [
+            [tensor_filters[o, s] for s in range(self.num_scales)]
+            for o in range(self.num_orientations)
+        ]
+        self._filter_cache[cache_key] = filters
+        return filters
+
+
 class PhaseCongruencyEngine:
     """
     PyTorch & Kornia accelerated 2D Log-Gabor Phase Congruency Engine.
@@ -276,7 +371,7 @@ class PhaseCongruencyEngine:
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
+    from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
     from lunar_core.models import SunAngles
 
     print("Executing Standalone Visual Test: PyTorch & Kornia Phase Congruency...")

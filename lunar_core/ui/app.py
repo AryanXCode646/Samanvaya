@@ -30,7 +30,7 @@ from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher
 from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.evaluation.metrics import EvaluationEngine, RegistrationEvaluationReport
-from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 
 
 # Configure Streamlit Page

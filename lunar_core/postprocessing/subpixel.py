@@ -26,6 +26,7 @@ class SubpixelSurfaceFit:
     sigma_y: float
     cov_xy: float
     weight: float
+    eigenvalues: Tuple[float, float] = (0.0, 0.0)
 
     def __iter__(self):
         yield self.dx
@@ -42,6 +43,82 @@ class SubpixelSurfaceFit:
             self.cov_xy,
             self.weight,
         )
+
+
+def fit_quadratic_peak(patch_3x3: np.ndarray) -> Optional[SubpixelSurfaceFit]:
+    r"""
+    Fits an analytical 2D bivariate quadratic surface:
+        f(x, y) = a*x^2 + b*y^2 + c*x*y + d*x + e*y + f
+    around integer grid point (0, 0) over a 3x3 local neighborhood.
+    """
+    if patch_3x3.shape != (3, 3):
+        raise ValueError(f"Expected 3x3 patch, got shape {patch_3x3.shape}")
+
+    z00 = float(patch_3x3[1, 1])
+    z_xp = float(patch_3x3[1, 2])
+    z_xm = float(patch_3x3[1, 0])
+    z_yp = float(patch_3x3[2, 1])
+    z_ym = float(patch_3x3[0, 1])
+    z_pp = float(patch_3x3[2, 2])
+    z_pm = float(patch_3x3[0, 2])
+    z_mp = float(patch_3x3[2, 0])
+    z_mm = float(patch_3x3[0, 0])
+
+    a = (z_xp - 2.0 * z00 + z_xm) / 2.0
+    b = (z_yp - 2.0 * z00 + z_ym) / 2.0
+    c = (z_pp - z_pm - z_mp + z_mm) / 4.0
+    d = (z_xp - z_xm) / 2.0
+    e = (z_yp - z_ym) / 2.0
+    f = z00
+
+    det_h = 4.0 * a * b - c**2
+    if det_h <= 1e-7 or a >= 0.0 or b >= 0.0:
+        return None
+
+    dx = (-2.0 * b * d + c * e) / det_h
+    dy = (-2.0 * a * e + c * d) / det_h
+
+    if abs(dx) > 1.0 or abs(dy) > 1.0:
+        return None
+
+    peak_val = a * dx**2 + b * dy**2 + c * dx * dy + d * dx + e * dy + f
+
+    sigma_xx = (-2.0 * b) / det_h
+    sigma_yy = (-2.0 * a) / det_h
+    cov_xy = c / det_h
+
+    sigma_x = float(np.sqrt(max(sigma_xx, 0.0)))
+    sigma_y = float(np.sqrt(max(sigma_yy, 0.0)))
+
+    trace_cov = sigma_xx + sigma_yy
+    det_cov = 1.0 / det_h
+    discriminant = max(0.0, trace_cov**2 - 4.0 * det_cov)
+    sqrt_disc = float(np.sqrt(discriminant))
+
+    lambda_1 = float(0.5 * (trace_cov + sqrt_disc))
+    lambda_2 = float(0.5 * (trace_cov - sqrt_disc))
+    weight = float(np.sqrt(det_h))
+
+    return SubpixelSurfaceFit(
+        dx=float(dx),
+        dy=float(dy),
+        peak_val=float(peak_val),
+        sigma_x=sigma_x,
+        sigma_y=sigma_y,
+        cov_xy=float(cov_xy),
+        weight=weight,
+        eigenvalues=(lambda_1, lambda_2),
+    )
+
+
+def fit_quadratic_peaks_batch(patches_3x3: np.ndarray) -> List[Optional[SubpixelSurfaceFit]]:
+    """
+    Batch quadratic surface fitting for an array of N 3x3 patches.
+    """
+    patches = np.asarray(patches_3x3, dtype=np.float64)
+    if patches.ndim != 3 or patches.shape[1:] != (3, 3):
+        raise ValueError(f"Expected array of shape (N, 3, 3), got {patches.shape}")
+    return [fit_quadratic_peak(p) for p in patches]
 
 
 class SubpixelRefinerBase(ABC):

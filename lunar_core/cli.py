@@ -11,6 +11,10 @@ import subprocess
 import sys
 import numpy as np
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 
 def print_banner() -> None:
     banner = r"""
@@ -34,18 +38,9 @@ def cmd_ui(args: argparse.Namespace) -> None:
     subprocess.run(cmd)
 
 
-def cmd_api(args: argparse.Namespace) -> None:
-    """Launches the FastAPI REST API."""
-    port = args.port or 8000
-    host = args.host or "0.0.0.0"
-    cmd = [sys.executable, "-m", "uvicorn", "ch2_lunar_reg.interfaces.api:app", "--host", host, "--port", str(port), "--reload"]
-    print(f"🛰️ Launching Samanvaya FastAPI Server on {host}:{port}...")
-    subprocess.run(cmd)
-
-
 def cmd_test(args: argparse.Namespace) -> None:
     """Executes the full automated verification test suite."""
-    cmd = [sys.executable, "-m", "pytest", "tests/", "ch2_lunar_reg/tests/", "-v"]
+    cmd = [sys.executable, "-m", "pytest", "tests/", "-v"]
     print("🧪 Executing Samanvaya Verification Test Suite...")
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
@@ -170,8 +165,8 @@ def cmd_info(args: argparse.Namespace) -> None:
     print("  • Out-of-Core Windowed Tiling for Gigapixel GeoTIFFs")
     print("  • 3-Step Hyperspectral Cascade Bridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)")
     print("  • USGS ISIS3 Jigsaw GCP Exporter with Curvature Covariance")
-    print("  • Automated Executive ReportLab PDF Mission Report Generator")
-    print("  • FastAPI WebSocket Live Streaming Endpoint (/ws/align)")
+    print("  • Classical RIFT Phase-Congruency Matcher & LoFTR Dense Matcher")
+    print("  • Interactive Streamlit Live Web Portal (streamlit run app.py)")
 
 
 def main() -> None:
@@ -186,11 +181,7 @@ def main() -> None:
     p_ui.add_argument("--port", type=int, default=8501, help="Port to bind Streamlit server")
     p_ui.set_defaults(func=cmd_ui)
 
-    # samanvaya api
-    p_api = subparsers.add_parser("api", help="Launch FastAPI REST server")
-    p_api.add_argument("--host", type=str, default="0.0.0.0", help="Host interface")
-    p_api.add_argument("--port", type=int, default=8000, help="Port to bind FastAPI server")
-    p_api.set_defaults(func=cmd_api)
+
 
     # samanvaya test
     p_test = subparsers.add_parser("test", help="Run automated verification test suite")

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import cv2
 import numpy as np
-from ch2_lunar_reg.domain.models import GeoRaster, SensorModality, SunAngles
+from lunar_core.models import GeoRaster, SensorModality, SunAngles
 
 
 @dataclass

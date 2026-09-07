@@ -10,7 +10,7 @@ import torch
 
 from lunar_core.models import KeypointMatch
 from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher, DenseLoFTRResult
-from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 from lunar_core.models import SunAngles
 
 

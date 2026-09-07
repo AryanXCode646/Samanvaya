@@ -12,7 +12,7 @@ import torch
 
 from lunar_core.models import SunAngles
 from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
-from ch2_lunar_reg.infrastructure.synthetic_generator import LunarTerrainSimulator
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 
 
 def test_phase_congruency_pytorch_invariance_under_inverted_lighting():
