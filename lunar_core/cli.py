@@ -76,16 +76,20 @@ def cmd_align(args: argparse.Namespace) -> None:
     if not matcher.is_pretrained:
         print("WARNING: LoFTR pretrained weights unavailable; results are not meaningful.")
 
-    inliers, H, warped = matcher.match(
+    match_result = matcher.match(
         source_image=raster_src.data,
         reference_image=raster_ref.data,
     )
+    inliers = match_result.inliers
+    H = match_result.homography
+    warped = match_result.warped_source
 
-    print(f"🎯 Discovered {len(inliers)} verified inliers.")
+    total_matches = len(match_result.all_matches)
+    print(f"🎯 Discovered {total_matches} raw matches and {len(inliers)} verified inliers.")
 
     # Generate Report
     report = EvaluationEngine.generate_report(
-        total_matches=len(inliers) * 2,  # approx
+        total_matches=total_matches,
         inliers=inliers,
         image_shape=raster_ref.data.shape,
         homography=H,
@@ -137,7 +141,10 @@ def cmd_align(args: argparse.Namespace) -> None:
     print("\n" + "=" * 50)
     print("📊 SAMANVAYA MISSION KPI SUMMARY")
     print("=" * 50)
-    print(f"  Sub-Pixel RMSE : {report.rmse_pixels:.4f} px (ISRO Mandate < 0.40 px: {'PASSED ✅' if report.meets_isro_mandate else 'NEEDS REVIEW ⚠️'})")
+    assessment = "NOT ASSESSED (reprojection consensus; no ground truth)"
+    if report.ground_truth_available:
+        assessment = "PASSED ✅" if report.meets_isro_mandate else "NEEDS REVIEW ⚠️"
+    print(f"  Reprojection RMSE: {report.rmse_pixels:.4f} px (ground-truth mandate: {assessment})")
     print(f"  Inlier Count   : {report.inlier_count} verified tie-points")
     print(f"  Inlier Ratio   : {report.inlier_ratio_percent:.2f}%")
     print(f"  Spatial Entropy: {report.spatial_uniformity_entropy:.4f} / 1.0 (Non-clumping score)")
@@ -167,7 +174,7 @@ def cmd_info(args: argparse.Namespace) -> None:
     print("  • Vectorized Log-Gabor Phase Congruency (Zero-DC Illumination Invariance)")
     print("  • O(1) Parabolic Taylor Sub-pixel Refinement (Strict Negative-Definite Hessian)")
     print("  • Out-of-Core Windowed Tiling for Gigapixel GeoTIFFs")
-    print("  • 3-Step Hyperspectral Cascade Bridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)")
+    print("  • Mission metadata views for OHRC, TMC-2, IIRS, LRO NAC, and SELENE TC")
     print("  • USGS ISIS3 Jigsaw GCP Exporter with Curvature Covariance")
     print("  • Classical RIFT Phase-Congruency Matcher & LoFTR Dense Matcher")
     print("  • Interactive Streamlit application (streamlit run app.py)")

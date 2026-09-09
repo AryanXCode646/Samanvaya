@@ -189,6 +189,15 @@ def _modality_for_product(product) -> SensorModality:
     return mapping.get(instrument, SensorModality.SYNTHETIC)
 
 
+def _sun_angles_for_product(product) -> Optional[SunAngles]:
+    if product.sun_azimuth_deg is None or product.sun_elevation_deg is None:
+        return None
+    return SunAngles(
+        azimuth_deg=product.sun_azimuth_deg,
+        elevation_deg=product.sun_elevation_deg,
+    )
+
+
 def run(args: argparse.Namespace) -> None:
     started_at = datetime.now(timezone.utc).isoformat()
     started = time.perf_counter()
@@ -201,29 +210,48 @@ def run(args: argparse.Namespace) -> None:
     target_product = inspect_product(target_path, root_dir=target_path.parent)
     source_modality = _modality_for_product(source_product)
     target_modality = _modality_for_product(target_product)
-    source, source_masked = read_product(source_path, source_modality)
-    target, target_masked = read_product(target_path, target_modality)
+    source_large_geotiff = source_path.suffix.lower() in {".tif", ".tiff"} and max(
+        source_product.height or 0, source_product.width or 0
+    ) >= args.tile_threshold
+    target_large_geotiff = target_path.suffix.lower() in {".tif", ".tiff"} and max(
+        target_product.height or 0, target_product.width or 0
+    ) >= args.tile_threshold
 
-    if max(source.shape + target.shape) >= args.tile_threshold:
+    source = target = None
+    source_masked = target_masked = 0
+    source_gsd = source_product.gsd_m or 1.0
+    target_gsd = target_product.gsd_m or 1.0
+    source_sun = _sun_angles_for_product(source_product)
+    target_sun = _sun_angles_for_product(target_product)
+    source_shape = (source_product.height or 0, source_product.width or 0)
+    target_shape = (target_product.height or 0, target_product.width or 0)
+
+    both_window_readable = source_path.suffix.lower() in {".tif", ".tiff"} and target_path.suffix.lower() in {".tif", ".tiff"}
+    if both_window_readable and (source_large_geotiff or target_large_geotiff):
         tiled = PlanetaryTileProcessor(tile_size=args.tile_size, overlap=args.overlap)
-        tiled_result = tiled.process(source.data, target.data, estimate_coarse_overlap=False)
+        tiled_result = tiled.process(source_path, target_path, estimate_coarse_overlap=False)
         total_matches = tiled_result.metrics.total_matches
         inliers = tiled_result.global_inliers
         matrix = tiled_result.global_homography
-        matcher_path = "dense_loftr_or_classical_rift_per_tile"
+        matcher_path = "dense_loftr_or_classical_rift_per_tile_from_paths"
         processing_time_ms = tiled_result.processing_time_s * 1000.0
     else:
+        source, source_masked = read_product(source_path, source_modality)
+        target, target_masked = read_product(target_path, target_modality)
+        source_gsd, target_gsd = source.gsd_meters, target.gsd_meters
+        source_sun, target_sun = source.sun_angles, target.sun_angles
+        source_shape, target_shape = source.shape, target.shape
         result = LunarCorePipeline().register(
             ref_image=target.data, target_image=source.data,
-            ref_sun=target.sun_angles, target_sun=source.sun_angles,
-            ref_gsd=target.gsd_meters, target_gsd=source.gsd_meters,
+            ref_sun=target_sun, target_sun=source_sun,
+            ref_gsd=target_gsd, target_gsd=source_gsd,
         )
         total_matches, inliers, matrix = len(result.matches), result.inliers, result.transform_matrix
         matcher_path, processing_time_ms = result.matcher_path, result.metrics.processing_time_ms
 
     report = EvaluationEngine.generate_report(
         total_matches=total_matches, inliers=inliers, homography=matrix,
-        image_shape=target.shape, processing_time_ms=processing_time_ms,
+        image_shape=target_shape, processing_time_ms=processing_time_ms,
     )
     report.export_json(output_dir / "evaluation_report.json")
     report.export_csv(output_dir / "evaluation_report.csv")
@@ -231,24 +259,24 @@ def run(args: argparse.Namespace) -> None:
         "dataset_class": "real_mission_data",
         "source": {
             "mission": source_product.mission,
-            "instrument": source_product.instrument or source.modality.value,
+            "instrument": source_product.instrument or source_modality.value,
             "product_id": source_product.product_id or source_path.stem,
             "file": str(source_path),
             "label": str(source_product.label_path) if source_product.label_path else None,
-            "gsd_m": source.gsd_meters,
-            "sun_azimuth_deg": source.sun_angles.azimuth_deg if source.sun_angles else None,
-            "sun_elevation_deg": source.sun_angles.elevation_deg if source.sun_angles else None,
+            "gsd_m": source_gsd,
+            "sun_azimuth_deg": source_sun.azimuth_deg if source_sun else None,
+            "sun_elevation_deg": source_sun.elevation_deg if source_sun else None,
             "masked_pixels": source_masked,
         },
         "target": {
             "mission": target_product.mission,
-            "instrument": target_product.instrument or target.modality.value,
+            "instrument": target_product.instrument or target_modality.value,
             "product_id": target_product.product_id or target_path.stem,
             "file": str(target_path),
             "label": str(target_product.label_path) if target_product.label_path else None,
-            "gsd_m": target.gsd_meters,
-            "sun_azimuth_deg": target.sun_angles.azimuth_deg if target.sun_angles else None,
-            "sun_elevation_deg": target.sun_angles.elevation_deg if target.sun_angles else None,
+            "gsd_m": target_gsd,
+            "sun_azimuth_deg": target_sun.azimuth_deg if target_sun else None,
+            "sun_elevation_deg": target_sun.elevation_deg if target_sun else None,
             "masked_pixels": target_masked,
         },
         "pipeline": {
@@ -271,8 +299,8 @@ def run(args: argparse.Namespace) -> None:
     }
     (output_dir / "provenance.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
     print(f"Site: {args.site}")
-    print(f"Source: {source_path.name} ({source.shape}, {source.gsd_meters:g} m/px)")
-    print(f"Target: {target_path.name} ({target.shape}, {target.gsd_meters:g} m/px)")
+    print(f"Source: {source_path.name} ({source_shape}, {source_gsd:g} m/px)")
+    print(f"Target: {target_path.name} ({target_shape}, {target_gsd:g} m/px)")
     print(f"Masked nodata pixels: source={source_masked}, target={target_masked}")
     print(f"Matcher path: {matcher_path}")
     print(f"RMSE: {report.rmse_pixels:.4f} px; inliers: {report.inlier_count}")

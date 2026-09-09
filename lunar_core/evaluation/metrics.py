@@ -48,6 +48,8 @@ class RegistrationEvaluationReport:
     homography_matrix: Optional[List[List[float]]] = None
     tie_points: List[Dict[str, Any]] = field(default_factory=list)
     image_shape: Tuple[int, int] = (0, 0)
+    ground_truth_available: bool = False
+    metric_basis: str = "reprojection_consensus"
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
@@ -86,7 +88,9 @@ class RegistrationEvaluationReport:
                 "mission": "ISRO Chandrayaan-2 Planetary Remote Sensing",
                 "problem_statement": "SIH PS 26166",
                 "timestamp_utc": self.timestamp,
-                "framework": "lunar_core v1.0.0",
+                "framework": "lunar_core research build",
+                "metric_basis": self.metric_basis,
+                "ground_truth_available": self.ground_truth_available,
             },
             "summary": {
                 "total_matches": self.total_matches,
@@ -101,6 +105,7 @@ class RegistrationEvaluationReport:
                 "std_residual_pixels": round(self.std_residual_pixels, 4),
                 "ce90_pixels": round(self.ce90_pixels, 4),
                 "meets_isro_mandate": self.meets_isro_mandate,
+                "mandate_assessment": "ground_truth" if self.ground_truth_available else "not_assessed",
                 "isro_mandate_threshold_px": 0.40,
                 "processing_time_ms": round(self.processing_time_ms, 2),
                 "image_shape_hw": list(self.image_shape),
@@ -481,6 +486,7 @@ class EvaluationEngine:
             h_list = None
             meets_mandate = False
 
+        ground_truth_available = control_point_rmse is not None
         return RegistrationEvaluationReport(
             total_matches=total_matches,
             inlier_count=inlier_count,
@@ -498,6 +504,8 @@ class EvaluationEngine:
             homography_matrix=h_list,
             tie_points=tie_points,
             image_shape=image_shape,
+            ground_truth_available=ground_truth_available,
+            metric_basis="ground_truth_control_points" if ground_truth_available else "reprojection_consensus",
         )
 
 
@@ -581,7 +589,7 @@ def run_real_evaluation_benchmark(
     import logging
     import time
     logger = logging.getLogger("samanvaya.metrics")
-    logger.info("Running Samanvaya Real Raster Evaluation Benchmark on bundled mission datasets...")
+    logger.info("Running Samanvaya bundled benchmark evaluation on calibrated raster datasets...")
 
     from lunar_core.pipeline import LunarCorePipeline
     from lunar_core.models import SunAngles
