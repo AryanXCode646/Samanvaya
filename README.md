@@ -6,7 +6,7 @@
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
 [![Kornia 0.8](https://img.shields.io/badge/Kornia-0.8-10b981?style=for-the-badge)](https://kornia.readthedocs.io)
 [![GDAL / Rasterio](https://img.shields.io/badge/GDAL%20%2F%20Rasterio-1.3%2B-2563eb?style=for-the-badge&logo=qgis&logoColor=white)](https://rasterio.readthedocs.io)
-[![Tests Passing](https://img.shields.io/badge/Tests-100%25%20Passed%20(62%2F62)-emerald?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/ashishsinghbora/Samanvaya)
+[![Tests](https://img.shields.io/badge/Tests-run%20pytest%20tests%2F-emerald?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/ashishsinghbora/Samanvaya)
 [![Security Hardened](https://img.shields.io/badge/Security-XXE%20%26%20Decompression%20Shielded-blueviolet?style=for-the-badge)](SECURITY.md)
 [![License MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
@@ -24,7 +24,7 @@
 Operating in harsh lunar conditions, Samanvaya autonomously resolves:
 1. **$180^\circ$ Solar Illumination & Shadow Inversion:** Contrast-reversed crater morphology across morning vs afternoon orbital passes.
 2. **Up to $320\times$ Ground Sampling Distance (GSD) Disparity:** Robust multi-scale correspondence bridging OHRC ($0.25\text{ m/px}$), TMC-2 ($5.0\text{ m/px}$), and IIRS hyperspectral infrared ($80.0\text{ m/px}$).
-3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement achieving $\mathbf{\sim 0.24\text{--}0.36\text{ px}}$ RMSE, beating the ISRO threshold of $\mathbf{< 0.40\text{ px}}$.
+3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement, evaluated separately on synthetic and real orbital data.
 4. **Out-of-Core Memory Safety:** Sliding-window raster ingestion with spatial Non-Maximal Suppression, processing gigapixel swaths within a strict $\le 4\text{ GB}$ dynamic RAM ceiling.
 5. **Mission Interoperability:** Native export of Ground Control Points (GCPs) for **USGS ISIS3 `jigsaw`** bundle adjustment and automated ReportLab executive PDF mission reports.
 
@@ -36,19 +36,21 @@ Operating in harsh lunar conditions, Samanvaya autonomously resolves:
 > **Dataset Provenance & Calibration Disclosure:**  
 > The bundled benchmark tiles under `lunar_core/assets/sample_data/` (`scenario_a`, `scenario_b`, `scenario_c`) are high-fidelity calibrated photogrammetric simulations generated via DEM ray-tracing with crater power-law distributions, real lunar landing site coordinates (Apollo 11, Jackson Crater, Shackleton Rim), and Lommel-Seeliger scattering. While Samanvaya includes production drivers for raw ISRO PDS4 XML products and multi-gigabyte GeoTIFFs (`PlanetaryRasterReader`, `PlanetaryTileProcessor`), these compact tiles enable 100% reproducible, offline benchmark verification without multi-gigabyte archive downloads.
 
-The table below summarizes empirical benchmarks evaluated on these calibrated datasets:
+> **Real-data status:** A Chandrayaan-2/LRO NAC pair has not yet been acquired in this checkout. Real-data RMSE, matcher-path behavior, and mandate status are pending acquisition and execution; no synthetic result should be interpreted as real orbital validation.
 
-| Evaluation Dimension | Classical Baseline (SIFT / ORB) | Standard LoFTR Baseline | **Samanvaya Framework** | ISRO SIH Mandate | Compliance Status |
-|---|---|---|---|---|---|
-| **Sub-Pixel RMSE (Apollo 11)** | $> 5.20\text{ px}$ (Fails) | $0.850\text{ px}$ | **$0.3377\text{ px}$** | $\mathbf{< 0.400\text{ px}}$ | **PASSED ★★★** |
-| **Sub-Pixel RMSE (TMC-2 Stereo)** | $2.410\text{ px}$ | $0.720\text{ px}$ | **$0.3355\text{ px}$** | $\mathbf{< 0.400\text{ px}}$ | **PASSED ★★★** |
-| **Extreme Lighting (12° vs 65°)** | $0\text{ matches}$ (Collapse) | $1.150\text{ px}$ | **$0.3706\text{ px}$** | $\mathbf{< 0.400\text{ px}}$ | **PASSED ★★★** |
-| **180° Shadow Reversal (Synthetic)** | Fails ($0\text{ inliers}$) | $0.890\text{ px}$ | **$0.1903\text{ px}$** | $\mathbf{< 0.400\text{ px}}$ | **PASSED ★★★** |
-| **Inlier Consensus Ratio** | $< 8.0\%$ | $32.0\%$ | **$52.4\% \text{--} 85.7\%$** | $\ge 40.0\%$ | **OPTIMAL** |
-| **Spatial Shannon Entropy ($H$)** | $0.210$ (Rim Clumping) | $0.680$ | **$0.8766 \text{--} 0.9661$** | $\ge 0.700$ (Spread) | **OPTIMAL** |
-| **GSD Scale Dynamic Ratio** | $\le 2\times$ | $\sim 4\times$ | **Up to $320\times$ (OHRC $\to$ IIRS)** | $320\times$ Bridge | **PASSED ★★★** |
-| **Peak RAM on Gigapixel Swaths** | OOM Crash ($> 8\text{ GB}$) | OOM Crash | **$885.7\text{ MB}$ (Streaming)** | $\le 4096\text{ MB}$ | **PASSED ★★★** |
-| **Automated Verification Suite** | None | Partial | **62 / 62 Tests Passing (100%)** | Zero Regressions | **PASSED ★★★** |
+The table below summarizes empirical benchmarks evaluated on these calibrated synthetic datasets. Real-data validation remains pending; see Dataset Provenance above.
+
+| Evaluation Dimension | Synthetic benchmark (DEM ray-trace, self-consistency check) | Real Chandrayaan-2/LRO NAC pair | ISRO SIH Mandate | Status |
+|---|---|---|---|---|
+| **Sub-Pixel RMSE (Apollo 11)** | $0.3377\text{ px}$ | Pending acquisition | $< 0.400\text{ px}$ | Synthetic result only |
+| **Sub-Pixel RMSE (TMC-2 Stereo)** | $0.3355\text{ px}$ | Pending acquisition | $< 0.400\text{ px}$ | Synthetic result only |
+| **Extreme Lighting (12° vs 65°)** | $0.3706\text{ px}$ | Pending acquisition | $< 0.400\text{ px}$ | Synthetic result only |
+| **180° Shadow Reversal** | $0.1903\text{ px}$ | Pending acquisition | $< 0.400\text{ px}$ | Synthetic result only |
+| **Inlier Consensus Ratio** | $52.4\% \text{--} 85.7\%$ | Pending acquisition | $\ge 40\%$ | Not assessed on real data |
+| **Spatial Shannon Entropy ($H$)** | $0.8766 \text{--} 0.9661$ | Pending acquisition | $\ge 0.700$ | Not assessed on real data |
+| **GSD Scale Dynamic Ratio** | Up to $320\times$ | Pending acquisition | $320\times$ bridge | Capability, not real validation |
+| **Peak RAM on Gigapixel Swaths** | $885.7\text{ MB}$ | Pending acquisition | $\le 4096\text{ MB}$ | Instrumented benchmark only |
+| **Automated Verification Suite** | Run `pytest tests/ -v` locally | Pending current run | Zero regressions | Not claimed here |
 
 ---
 
@@ -170,6 +172,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
+
+Before an offline judging session, run `make prefetch-weights` once while internet access is available. This downloads the pretrained LoFTR weights; if loading later fails, the UI reports that untrained weights are not meaningful.
 
 ### Running the Services
 ```bash

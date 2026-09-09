@@ -16,4 +16,6 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Launch interactive Streamlit UI
-import lunar_core.ui.app
+import runpy
+
+runpy.run_module("lunar_core.ui.app", run_name="__main__")

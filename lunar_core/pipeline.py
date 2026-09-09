@@ -98,7 +98,13 @@ class LunarCorePipeline:
         )
 
         # Step 4: Fine Dense Cross-Attention Matching on ROI
-        initial_matches = self.dense_matcher.match_patches(roi.ref_roi, roi.target_roi)
+        try:
+            initial_matches = self.dense_matcher.match_patches(roi.ref_roi, roi.target_roi)
+        except RuntimeError as exc:
+            if "out of memory" not in str(exc).lower() and "cuda" not in str(exc).lower():
+                raise
+            logger.warning("Dense LoFTR failed with a memory error; switching to Classical RIFT fallback: %s", exc)
+            initial_matches = []
 
         # Map ROI matches back to global reference image space
         xmin, ymin = roi.ref_bbox[0], roi.ref_bbox[1]
@@ -123,14 +129,19 @@ class LunarCorePipeline:
         if len(inliers) < 4:
             matcher_path = "classical_rift"
             logger.info("Dense LoFTR produced %d inliers; trying Classical RIFT fallback.", len(inliers))
-            rift_matches = ClassicalRIFTMatcher().match(
-                pc_ref.max_moment,
-                pc_ref.orientation_max_idx,
-                pc_tgt.max_moment,
-                pc_tgt.orientation_max_idx,
-            )
-            matrix, inliers = self.estimator.estimate(rift_matches, self.trans_type)
-            logger.info("Matcher path: %s (%d inliers).", matcher_path, len(inliers))
+            try:
+                rift_matches = ClassicalRIFTMatcher().match(
+                    pc_ref.max_moment,
+                    pc_ref.orientation_max_idx,
+                    pc_tgt.max_moment,
+                    pc_tgt.orientation_max_idx,
+                )
+                matrix, inliers = self.estimator.estimate(rift_matches, self.trans_type)
+                logger.info("Matcher path: %s (%d inliers).", matcher_path, len(inliers))
+            except Exception:
+                logger.exception("Classical RIFT fallback failed; returning an empty registration result.")
+                matcher_path = "classical_rift_failed"
+                matrix, inliers = None, []
 
         # Step 7: Sub-Pixel Peak Refinement on Invariant Phase Congruency Surfaces
         if self.enable_subpixel and inliers:

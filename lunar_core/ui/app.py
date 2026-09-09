@@ -11,6 +11,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import time
 from typing import Optional, Tuple, Union
 
@@ -32,6 +33,7 @@ from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.evaluation.metrics import EvaluationEngine, RegistrationEvaluationReport
 from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
+from lunar_core.data_io.raster_reader import PlanetaryRasterReader
 
 
 # Configure Streamlit Page
@@ -103,6 +105,18 @@ def load_geotiff_file(file_path: Union[str, Path]) -> np.ndarray:
         p_low, p_high = np.percentile(img_f, 1.0), np.percentile(img_f, 99.0)
         denom = max(float(p_high - p_low), 1e-5)
         return np.clip((img_f - p_low) / denom, 0.0, 1.0).astype(np.float32)
+
+
+def parse_uploaded_pds4_metadata(uploaded_file) -> Tuple[SunAngles, float, SensorModality]:
+    """Parse an uploaded PDS4 XML label through the hardened raster reader."""
+    suffix = Path(uploaded_file.name or "metadata.xml").suffix.lower() or ".xml"
+    with tempfile.NamedTemporaryFile(prefix="samanvaya-pds4-", suffix=suffix, delete=False) as temp_file:
+        temp_path = Path(temp_file.name)
+        temp_file.write(uploaded_file.getvalue())
+    try:
+        return PlanetaryRasterReader.parse_pds4_metadata(temp_path, allowed_dir=temp_path.parent)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def load_uploaded_image(uploaded_file) -> np.ndarray:
@@ -234,12 +248,16 @@ ref_modality = st.sidebar.selectbox("Reference Modality", [SensorModality.LRO_NA
 
 uploaded_src = None
 uploaded_ref = None
+uploaded_src_xml = None
+uploaded_ref_xml = None
 
 if selected_key == "custom_upload":
     st.sidebar.markdown("---")
     st.sidebar.header("📁 Upload Custom GeoTIFF Rasters")
     uploaded_src = st.sidebar.file_uploader("Upload Source GeoTIFF (OHRC / TMC-2)", type=["tif", "tiff", "geotiff", "png", "jpg"])
     uploaded_ref = st.sidebar.file_uploader("Upload Reference GeoTIFF (LRO NAC / Base)", type=["tif", "tiff", "geotiff", "png", "jpg"])
+    uploaded_src_xml = st.sidebar.file_uploader("Upload Source PDS4 XML (Optional)", type=["xml"], key="source_pds4_xml")
+    uploaded_ref_xml = st.sidebar.file_uploader("Upload Reference PDS4 XML (Optional)", type=["xml"], key="reference_pds4_xml")
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Alignment Engine Parameters")
@@ -254,6 +272,10 @@ magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0
 
 img_source: Optional[np.ndarray] = None
 img_ref: Optional[np.ndarray] = None
+sun_src: Optional[SunAngles] = None
+sun_ref: Optional[SunAngles] = None
+src_gsd = 1.0
+ref_gsd = 1.0
 
 if selected_key in ["scenario_a", "scenario_b", "scenario_c"]:
     bm = benchmarks.get(selected_key, {})
@@ -310,8 +332,21 @@ elif selected_key == "custom_upload":
             img_source = load_uploaded_image(uploaded_src)
             img_ref = load_uploaded_image(uploaded_ref)
             st.success(f"Loaded Custom Source ({img_source.shape[1]}x{img_source.shape[0]}) and Reference ({img_ref.shape[1]}x{img_ref.shape[0]}) GeoTIFFs.")
+
+            if uploaded_src_xml is not None:
+                sun_src, src_gsd, src_sensor = parse_uploaded_pds4_metadata(uploaded_src_xml)
+                st.info(
+                    f"Source PDS4 metadata: {src_sensor.value}, {src_gsd:g} m/px, "
+                    f"sun azimuth {sun_src.azimuth_deg:g}°, elevation {sun_src.elevation_deg:g}°."
+                )
+            if uploaded_ref_xml is not None:
+                sun_ref, ref_gsd, ref_sensor = parse_uploaded_pds4_metadata(uploaded_ref_xml)
+                st.info(
+                    f"Reference PDS4 metadata: {ref_sensor.value}, {ref_gsd:g} m/px, "
+                    f"sun azimuth {sun_ref.azimuth_deg:g}°, elevation {sun_ref.elevation_deg:g}°."
+                )
         except Exception as e:
-            st.error(f"Error reading GeoTIFF rasters: {e}")
+            st.error(f"Error reading custom imagery or PDS4 metadata: {e}")
     else:
         st.warning("Please upload both Source and Reference GeoTIFFs via the sidebar to execute registration.")
 
@@ -333,8 +368,15 @@ if img_source is not None and img_ref is not None:
         # Step 2: Illumination-Invariant Log-Gabor Phase Congruency
         progress_bar.progress(35, text="Step 2/5: Vectorized 2D Log-Gabor Phase Congruency (PyTorch FFT)...")
         pc_engine = PhaseCongruencyEngine(num_scales=4, num_orientations=6)
-        pc_src = pc_engine.compute(img_source)
-        pc_ref = pc_engine.compute(img_ref)
+        pc_src_input = img_source
+        pc_ref_input = img_ref
+        if selected_key == "custom_upload" and sun_src is not None and sun_ref is not None:
+            photometric = PhotometricNormalizer()
+            pc_src_input, _ = photometric.normalize(img_source, sun_src, pixel_gsd=src_gsd)
+            pc_ref_input, _ = photometric.normalize(img_ref, sun_ref, pixel_gsd=ref_gsd)
+            st.caption("PDS4 solar geometry and GSD applied to custom-upload photometric preprocessing.")
+        pc_src = pc_engine.compute(pc_src_input)
+        pc_ref = pc_engine.compute(pc_ref_input)
         time.sleep(0.1)
 
         # Step 3: Dense LoFTR Cross-Attention Matching
@@ -443,7 +485,7 @@ if "result_report" in st.session_state:
     col_k5.metric("Pipeline Latency", f"{report.processing_time_ms:.1f} ms")
 
     if report.meets_isro_mandate:
-        st.success("🎯 **ISRO SIH PS 26166 Mandate Passed**: Sub-pixel registration RMSE < 0.40 pixels achieved under extreme opposite lighting!")
+        st.success("🎯 **Synthetic benchmark threshold met**: Sub-pixel registration RMSE < 0.40 pixels for this run.")
     else:
         st.warning("⚠️ Sub-pixel RMSE threshold (> 0.40 px) or inlier count requires refinement.")
 
