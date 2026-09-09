@@ -73,7 +73,7 @@ flowchart TD
 
     subgraph APP["3. Application Layer (Pipelines & Multi-Scale Solvers)"]
         MIN --> FM["Fourier-Mellin 180° Invariant Coarse Rot/Scale Localizer"]
-        FM --> CAS["Hierarchical Scale Cascade (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)"]
+          FM --> CAS["HierarchicalMultiModalBridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)"]
         CAS --> TR["Dense LoFTR Linear Transformer Cross-Attention (Primary Matcher)"]
         TR --> ANMS["8x8 Spatial Hash Bucketing ANMS (Entropy H > 0.85)"]
         ANMS --> MAG["USAC-MAGSAC++ Robust Projective Consensus"]
