@@ -92,12 +92,10 @@
 - **Parabolic Taylor Hessian Surface Plot:**
   - 3D wireframe plot showing the continuous bivariate paraboloid $f(x, y) = ax^2 + by^2 + cxy + dx + ey + f$ fitted to the $3 \times 3$ correlation neighborhood.
   - Stationary sub-pixel peak point highlighted: $\delta^* = -H^{-1} g$.
-- **Scorecard Metrics Box (Live Real-Raster Benchmarks):**
-  - **Reprojection RMSE:** $\mathbf{0.2408\text{ px}}$ *(ISRO Mandate: $< 0.40\text{ px}$ — PASSED)*
-  - **Inlier Consensus Ratio:** $\mathbf{80.0\%}$ *(USAC-MAGSAC++ with Tukey Loss)*
-  - **Spatial Shannon Uniformity Score:** $\mathbf{0.8766}$ *(Scale 0.0 to 1.0)*
-  - **CE90 Circular Error:** $\mathbf{0.4513\text{ px}}$
-  - **Peak Dynamic RAM:** $\mathbf{885\text{ MB}}$ on massive rasters *(Ceiling: $4096\text{ MB}$)*
+- **Scorecard Metrics Box:**
+  - **Synthetic benchmark RMSE:** $0.3377\text{ px}$ (DEM ray-trace self-consistency check)
+  - **Real Chandrayaan-2/LRO NAC RMSE:** Pending acquisition and execution
+  - **Peak Dynamic RAM:** $885\text{ MB}$ on the instrumented benchmark path *(Ceiling: $4096\text{ MB}$)*
 
 ### Key Slide Bullets
 - **Closed-Form $\mathcal{O}(1)$ Taylor Expansion:** Continuous sub-pixel peak estimation using second-order analytical derivatives:
@@ -114,7 +112,7 @@
 >  
 > *Furthermore, we eliminate feature clumping. Crater rims often attract 90% of keypoints while flat mare regions starve. Our 8x8 Grid ANMS allocator enforces equal cell representation, guaranteeing a high spatial Shannon entropy score of 0.87.*  
 >  
-> *Across real Chandrayaan-2 and LRO NAC test swaths, our verified RMSE is 0.24 to 0.36 pixels—beating ISRO's 0.40 pixel requirement by over 40% margin."*
+> *On our real Chandrayaan-2/LRO NAC test pair we measured [real RMSE] px; our synthetic DEM benchmark measures 0.3377 px and exists to validate the math in isolation from sensor noise and matcher domain-shift. Real-data validation is pending acquisition in this checkout.*
 
 ---
 
@@ -162,7 +160,7 @@
   ```
 - **Executive PDF Mission Report Snapshot:** Displaying the official certification badge:  
   `★ ISRO SIH PS 26166 COMPLIANCE CERTIFICATION: VERIFIED OPTIMAL ★`  
-  `Cryptographic Verification Stamp: SHA256 [E3B0C44298FC1C149AFBF4C8]`
+  `Report Checksum (SHA256 of tie-point CSV contents)`
 
 ### Key Slide Bullets
 - **USGS ISIS3 `jigsaw` Compatibility:** Directly exports tie-points as Ground Control Point (GCP) CSVs and ISIS3 Control Networks for planetary bundle adjustment.
@@ -175,9 +173,9 @@
 >  
 > *First, it integrates directly into ISRO's existing photogrammetric toolchains. Samanvaya exports verified tie-points directly into USGS ISIS3 Ground Control Point format, enabling seamless ingestion by the ISIS3 `jigsaw` bundle adjustment utility.*  
 >  
-> *Second, with a single command, our engine compiles an official Executive PDF Mission Report using ReportLab—complete with orbital metadata, residual error histograms, and a SHA-256 cryptographic compliance certification stamp.*  
+> *Second, with a single command, our engine compiles an Executive PDF Mission Report using ReportLab—complete with orbital metadata, residual error histograms, and a checksum of the exported tie-point CSV contents.*
 >  
-> *Third, the codebase is fully hardened: 62 automated unit and integration tests pass at 100%, backed by single-command `make pipeline`, `make metrics`, and Docker containerization.*  
+> *Third, the codebase is packaged with automated tests, single-command `make pipeline` and `make metrics` targets, and Docker containerization. The current test result must be verified in the demo environment before claiming a pass rate.*
 >  
 > *By eliminating hundreds of hours of manual Ground Control Point selection, Samanvaya empowers ISRO scientists to autonomously generate seamless, sub-pixel orthomosaics for lunar landing safety, mineralogical mapping, and scientific discovery.*  
 >  

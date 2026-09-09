@@ -71,6 +71,8 @@ def cmd_align(args: argparse.Namespace) -> None:
         cap_per_cell=args.cap,
         magsac_reproj_threshold=args.reproj_threshold,
     )
+    if not matcher.is_pretrained:
+        print("WARNING: LoFTR pretrained weights unavailable; results are not meaningful.")
 
     inliers, H, warped = matcher.match(
         source_image=raster_src.data,
@@ -166,7 +168,7 @@ def cmd_info(args: argparse.Namespace) -> None:
     print("  • 3-Step Hyperspectral Cascade Bridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)")
     print("  • USGS ISIS3 Jigsaw GCP Exporter with Curvature Covariance")
     print("  • Classical RIFT Phase-Congruency Matcher & LoFTR Dense Matcher")
-    print("  • Interactive Streamlit Live Web Portal (streamlit run app.py)")
+    print("  • Interactive Streamlit application (streamlit run app.py)")
 
 
 def main() -> None:

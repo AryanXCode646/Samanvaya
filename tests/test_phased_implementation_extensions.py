@@ -30,7 +30,8 @@ from lunar_core.postprocessing.subpixel import (
 from lunar_core.data_io.tile_processor import PlanetaryTileProcessor, TileProcessingResult
 
 # Phase 2 imports
-from lunar_core.preprocessing.spectral import HyperspectralBandSelector, IIRSCascadeBridge, IIRSCascadeAlignmentResult
+from lunar_core.preprocessing.spectral import HyperspectralBandSelector
+from lunar_core.alignment.scale_space import HierarchicalMultiModalBridge, HierarchicalAlignmentResult
 
 # Phase 3 imports
 from lunar_core.data_io.isis_exporter import IsisGcpExporter
@@ -202,7 +203,7 @@ def test_phase2_iirs_cascade_bridge_320x_gap():
     for b in range(32):
         iirs_cube[b] = base_iirs + np.random.normal(0, 0.01, (30, 30)).astype(np.float32)
 
-    bridge = IIRSCascadeBridge()
+    bridge = HierarchicalMultiModalBridge()
     result = bridge.align_cascade(
         ohrc_image=ohrc,
         tmc2_image=tmc2,
@@ -212,12 +213,12 @@ def test_phase2_iirs_cascade_bridge_320x_gap():
         iirs_gsd=80.0,
     )
 
-    assert isinstance(result, IIRSCascadeAlignmentResult)
+    assert isinstance(result, HierarchicalAlignmentResult)
     assert result.h_ohrc_to_tmc2.shape == (3, 3)
     assert result.h_tmc2_to_iirs.shape == (3, 3)
     assert result.h_ohrc_to_iirs.shape == (3, 3)
     assert result.composite_scale_ratio == 320.0
-    assert result.continuum_band.shape == (30, 30)
+    assert result.iirs_structural_band.shape == (30, 30)
 
     # Point transformation
     test_pts = np.array([[80.0, 80.0]], dtype=np.float32)
@@ -233,18 +234,16 @@ def test_phase2_iirs_cascade_alignment():
     """
     Step 2.2: Verify IIRS multi-scale cascade bridging from OHRC -> TMC2 -> IIRS.
     """
-    bridge = IIRSCascadeBridge()
+    bridge = HierarchicalMultiModalBridge()
     h1 = np.eye(3, dtype=np.float64)
     h2 = np.eye(3, dtype=np.float64)
-    res = IIRSCascadeAlignmentResult(
+    res = HierarchicalAlignmentResult(
         h_ohrc_to_tmc2=h1,
         h_tmc2_to_iirs=h2,
         h_ohrc_to_iirs=h2 @ h1,
-        continuum_band=np.zeros((64, 64), dtype=np.float32),
-        composite_scale_ratio=320.0,
-        step1_matches=[],
-        step2_matches=[],
-        confidence=1.0,
+        inliers_ohrc_tmc2=[],
+        inliers_tmc2_iirs=[],
+        iirs_structural_band=np.zeros((64, 64), dtype=np.float32),
     )
     assert res.composite_scale_ratio == 320.0
     pts = np.array([[10.0, 20.0]], dtype=np.float32)

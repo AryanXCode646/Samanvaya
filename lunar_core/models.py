@@ -126,3 +126,4 @@ class RegistrationResult:
     inliers: List[KeypointMatch]
     metrics: RegistrationMetrics
     warped_target: Optional[np.ndarray] = None
+    matcher_path: str = "dense_loftr"

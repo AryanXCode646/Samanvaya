@@ -10,6 +10,7 @@ from lunar_core.alignment.dense_matcher import (
     DenseLoFTRResult,
     DenseTransformerMatcher,
 )
+from lunar_core.alignment.rift_matcher import ClassicalRIFTMatcher
 
 __all__ = [
     "FourierMellinAligner",
@@ -20,4 +21,5 @@ __all__ = [
     "DenseLoFTRMatcher",
     "DenseLoFTRResult",
     "DenseTransformerMatcher",
+    "ClassicalRIFTMatcher",
 ]

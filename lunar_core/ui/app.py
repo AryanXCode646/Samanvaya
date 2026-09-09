@@ -11,6 +11,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import time
 from typing import Optional, Tuple, Union
 
@@ -27,10 +28,12 @@ import torch
 
 from lunar_core.models import SensorModality, SunAngles, KeypointMatch
 from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher
+from lunar_core.alignment.rift_matcher import ClassicalRIFTMatcher
 from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.evaluation.metrics import EvaluationEngine, RegistrationEvaluationReport
 from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
+from lunar_core.data_io.raster_reader import PlanetaryRasterReader
 
 
 # Configure Streamlit Page
@@ -102,6 +105,18 @@ def load_geotiff_file(file_path: Union[str, Path]) -> np.ndarray:
         p_low, p_high = np.percentile(img_f, 1.0), np.percentile(img_f, 99.0)
         denom = max(float(p_high - p_low), 1e-5)
         return np.clip((img_f - p_low) / denom, 0.0, 1.0).astype(np.float32)
+
+
+def parse_uploaded_pds4_metadata(uploaded_file) -> Tuple[SunAngles, float, SensorModality]:
+    """Parse an uploaded PDS4 XML label through the hardened raster reader."""
+    suffix = Path(uploaded_file.name or "metadata.xml").suffix.lower() or ".xml"
+    with tempfile.NamedTemporaryFile(prefix="samanvaya-pds4-", suffix=suffix, delete=False) as temp_file:
+        temp_path = Path(temp_file.name)
+        temp_file.write(uploaded_file.getvalue())
+    try:
+        return PlanetaryRasterReader.parse_pds4_metadata(temp_path, allowed_dir=temp_path.parent)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def load_uploaded_image(uploaded_file) -> np.ndarray:
@@ -233,12 +248,16 @@ ref_modality = st.sidebar.selectbox("Reference Modality", [SensorModality.LRO_NA
 
 uploaded_src = None
 uploaded_ref = None
+uploaded_src_xml = None
+uploaded_ref_xml = None
 
 if selected_key == "custom_upload":
     st.sidebar.markdown("---")
     st.sidebar.header("📁 Upload Custom GeoTIFF Rasters")
     uploaded_src = st.sidebar.file_uploader("Upload Source GeoTIFF (OHRC / TMC-2)", type=["tif", "tiff", "geotiff", "png", "jpg"])
     uploaded_ref = st.sidebar.file_uploader("Upload Reference GeoTIFF (LRO NAC / Base)", type=["tif", "tiff", "geotiff", "png", "jpg"])
+    uploaded_src_xml = st.sidebar.file_uploader("Upload Source PDS4 XML (Optional)", type=["xml"], key="source_pds4_xml")
+    uploaded_ref_xml = st.sidebar.file_uploader("Upload Reference PDS4 XML (Optional)", type=["xml"], key="reference_pds4_xml")
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Alignment Engine Parameters")
@@ -253,6 +272,10 @@ magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0
 
 img_source: Optional[np.ndarray] = None
 img_ref: Optional[np.ndarray] = None
+sun_src: Optional[SunAngles] = None
+sun_ref: Optional[SunAngles] = None
+src_gsd = 1.0
+ref_gsd = 1.0
 
 if selected_key in ["scenario_a", "scenario_b", "scenario_c"]:
     bm = benchmarks.get(selected_key, {})
@@ -309,8 +332,21 @@ elif selected_key == "custom_upload":
             img_source = load_uploaded_image(uploaded_src)
             img_ref = load_uploaded_image(uploaded_ref)
             st.success(f"Loaded Custom Source ({img_source.shape[1]}x{img_source.shape[0]}) and Reference ({img_ref.shape[1]}x{img_ref.shape[0]}) GeoTIFFs.")
+
+            if uploaded_src_xml is not None:
+                sun_src, src_gsd, src_sensor = parse_uploaded_pds4_metadata(uploaded_src_xml)
+                st.info(
+                    f"Source PDS4 metadata: {src_sensor.value}, {src_gsd:g} m/px, "
+                    f"sun azimuth {sun_src.azimuth_deg:g}°, elevation {sun_src.elevation_deg:g}°."
+                )
+            if uploaded_ref_xml is not None:
+                sun_ref, ref_gsd, ref_sensor = parse_uploaded_pds4_metadata(uploaded_ref_xml)
+                st.info(
+                    f"Reference PDS4 metadata: {ref_sensor.value}, {ref_gsd:g} m/px, "
+                    f"sun azimuth {sun_ref.azimuth_deg:g}°, elevation {sun_ref.elevation_deg:g}°."
+                )
         except Exception as e:
-            st.error(f"Error reading GeoTIFF rasters: {e}")
+            st.error(f"Error reading custom imagery or PDS4 metadata: {e}")
     else:
         st.warning("Please upload both Source and Reference GeoTIFFs via the sidebar to execute registration.")
 
@@ -332,8 +368,15 @@ if img_source is not None and img_ref is not None:
         # Step 2: Illumination-Invariant Log-Gabor Phase Congruency
         progress_bar.progress(35, text="Step 2/5: Vectorized 2D Log-Gabor Phase Congruency (PyTorch FFT)...")
         pc_engine = PhaseCongruencyEngine(num_scales=4, num_orientations=6)
-        pc_src = pc_engine.compute(img_source)
-        pc_ref = pc_engine.compute(img_ref)
+        pc_src_input = img_source
+        pc_ref_input = img_ref
+        if selected_key == "custom_upload" and sun_src is not None and sun_ref is not None:
+            photometric = PhotometricNormalizer()
+            pc_src_input, _ = photometric.normalize(img_source, sun_src, pixel_gsd=src_gsd)
+            pc_ref_input, _ = photometric.normalize(img_ref, sun_ref, pixel_gsd=ref_gsd)
+            st.caption("PDS4 solar geometry and GSD applied to custom-upload photometric preprocessing.")
+        pc_src = pc_engine.compute(pc_src_input)
+        pc_ref = pc_engine.compute(pc_ref_input)
         time.sleep(0.1)
 
         # Step 3: Dense LoFTR Cross-Attention Matching
@@ -346,6 +389,8 @@ if img_source is not None and img_ref is not None:
             cap_per_cell=anms_cap,
             magsac_reproj_threshold=magsac_thresh,
         )
+        if not matcher.is_pretrained:
+            st.error("LoFTR pretrained weights are unavailable; results are not meaningful.")
 
         src_tensor, norm_src = matcher.prepare_geotiff_array(pc_src.max_moment)
         ref_tensor, norm_ref = matcher.prepare_geotiff_array(pc_ref.max_moment)
@@ -368,6 +413,18 @@ if img_source is not None and img_ref is not None:
         inliers, H, warped_source = matcher.filter_outliers_magsac(
             refined_matches, img_source, img_ref.shape
         )
+        matcher_path = "dense_loftr"
+        if len(inliers) < 4:
+            matcher_path = "classical_rift"
+            rift_matches = ClassicalRIFTMatcher().match(
+                pc_ref.max_moment,
+                pc_ref.orientation_max_idx,
+                pc_src.max_moment,
+                pc_src.orientation_max_idx,
+            )
+            inliers, H, warped_source = matcher.filter_outliers_magsac(
+                rift_matches, img_source, img_ref.shape
+            )
         elapsed_ms = (time.perf_counter() - start_t) * 1000.0
 
         # Step 6: Evaluation Diagnostics
@@ -388,6 +445,7 @@ if img_source is not None and img_ref is not None:
         st.session_state["inliers"] = inliers
         st.session_state["raw_matches"] = raw_matches
         st.session_state["homography"] = H
+        st.session_state["matcher_path"] = matcher_path
         st.session_state["warped_source"] = warped_source
         st.session_state["img_source"] = img_source
         st.session_state["img_ref"] = img_ref
@@ -400,11 +458,13 @@ if "result_report" in st.session_state:
     report: RegistrationEvaluationReport = st.session_state["result_report"]
     inliers = st.session_state["inliers"]
     H = st.session_state["homography"]
+    matcher_path = st.session_state.get("matcher_path", "dense_loftr")
     warped_src = st.session_state["warped_source"]
     img_source = st.session_state["img_source"]
     img_ref = st.session_state["img_ref"]
 
     st.markdown("---")
+    st.caption(f"Matcher path: {matcher_path}")
     st.subheader("📊 Planetary Hackathon KPI Metric Scorecards")
 
     # 5 KPI Metric Scorecards
@@ -425,7 +485,7 @@ if "result_report" in st.session_state:
     col_k5.metric("Pipeline Latency", f"{report.processing_time_ms:.1f} ms")
 
     if report.meets_isro_mandate:
-        st.success("🎯 **ISRO SIH PS 26166 Mandate Passed**: Sub-pixel registration RMSE < 0.40 pixels achieved under extreme opposite lighting!")
+        st.success("🎯 **Synthetic benchmark threshold met**: Sub-pixel registration RMSE < 0.40 pixels for this run.")
     else:
         st.warning("⚠️ Sub-pixel RMSE threshold (> 0.40 px) or inlier count requires refinement.")
 
@@ -491,6 +551,30 @@ if "result_report" in st.session_state:
     # TAB 3: Residual Error Scatter & Frequency Invariance
     with tab_diagnostics:
         st.subheader("📈 Residual Error Scatter Field & Frequency Invariance")
+        st.markdown("#### Inlier Vector Flow Field")
+        st.caption("Displacement vectors show the direction and magnitude of each inlier match.")
+        if inliers:
+            ref_x = np.array([match.ref_xy[0] for match in inliers])
+            ref_y = np.array([match.ref_xy[1] for match in inliers])
+            delta_x = np.array([match.target_xy[0] - match.ref_xy[0] for match in inliers])
+            delta_y = np.array([match.target_xy[1] - match.ref_xy[1] for match in inliers])
+            magnitudes = np.hypot(delta_x, delta_y)
+
+            flow_fig, flow_ax = plt.subplots(figsize=(10, 7))
+            flow_ax.imshow(img_ref, cmap="gray")
+            flow = flow_ax.quiver(
+                ref_x, ref_y, delta_x, delta_y, magnitudes,
+                cmap="autumn", angles="xy", scale_units="xy", scale=1.0,
+                width=0.005,
+            )
+            flow_ax.scatter(ref_x, ref_y, c="lime", s=25, edgecolors="black", linewidths=0.5)
+            flow_ax.set_title(f"Inlier Vector Flow Field ({len(inliers)} matches)")
+            flow_ax.axis("off")
+            flow_fig.colorbar(flow, ax=flow_ax, shrink=0.7, label="Displacement Magnitude (pixels)")
+            st.pyplot(flow_fig)
+        else:
+            st.warning("No inliers detected for vector flow field.")
+
         col_d1, col_d2 = st.columns(2)
 
         with col_d1:

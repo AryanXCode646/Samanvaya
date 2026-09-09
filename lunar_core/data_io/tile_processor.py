@@ -27,13 +27,16 @@ from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 import cv2
 import numpy as np
+import torch
 import rasterio
 from rasterio.windows import Window
 from scipy.spatial import cKDTree
 
 from lunar_core.models import KeypointMatch, RegistrationMetrics
 from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher
+from lunar_core.alignment.rift_matcher import ClassicalRIFTMatcher
 from lunar_core.alignment.fourier_mellin import FourierMellinAligner
+from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.evaluation.metrics import EvaluationEngine
 
 logger = logging.getLogger("lunar_core.tile_processor")
@@ -113,6 +116,8 @@ class PlanetaryTileProcessor:
             grid_bins=8,
             cap_per_cell=4,
         )
+        self.rift_matcher = ClassicalRIFTMatcher()
+        self.pc_engine = PhaseCongruencyEngine(num_scales=3, num_orientations=4)
 
     @staticmethod
     def _estimate_tile_pair_ram_mb(ref_shape: Tuple[int, int], src_shape: Tuple[int, int]) -> float:
@@ -456,6 +461,16 @@ class PlanetaryTileProcessor:
                     logger.debug(f"Tile matching failed at ref ({win_ref.col_off}, {win_ref.row_off}): {e}")
                     tile_inliers = []
 
+                if len(tile_inliers) < self.min_inliers_per_tile:
+                    pc_ref = self.pc_engine.compute(in_ref)
+                    pc_src = self.pc_engine.compute(in_src)
+                    tile_inliers = self.rift_matcher.match(
+                        pc_ref.max_moment,
+                        pc_ref.orientation_max_idx,
+                        pc_src.max_moment,
+                        pc_src.orientation_max_idx,
+                    )
+
                 if len(tile_inliers) >= self.min_inliers_per_tile:
                     tiles_with_matches += 1
 
@@ -485,6 +500,8 @@ class PlanetaryTileProcessor:
                 del tile_ref, tile_src
                 if processed_tiles % 10 == 0:
                     gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
         finally:
             if open_src is not None:
                 open_src.close()

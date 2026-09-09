@@ -15,6 +15,7 @@ Features:
 from __future__ import annotations
 
 import datetime
+import csv
 import hashlib
 import io
 from pathlib import Path
@@ -38,6 +39,21 @@ from lunar_core.models import (
     SunAngles,
 )
 from lunar_core.data_io.raster_reader import sanitize_path
+
+
+def compute_tiepoint_csv_sha256(matches: List[KeypointMatch]) -> str:
+    """Return the SHA256 of the exact tie-point CSV representation used in reports."""
+    tiepoint_csv = io.StringIO()
+    tiepoint_writer = csv.writer(tiepoint_csv, lineterminator="\n")
+    tiepoint_writer.writerow(["ref_x", "ref_y", "target_x", "target_y", "confidence", "residual_error"])
+    for match in matches:
+        tiepoint_writer.writerow([
+            f"{match.ref_xy[0]:.9f}", f"{match.ref_xy[1]:.9f}",
+            f"{match.target_xy[0]:.9f}", f"{match.target_xy[1]:.9f}",
+            f"{match.confidence:.9f}",
+            "" if match.residual_error is None else f"{match.residual_error:.9f}",
+        ])
+    return hashlib.sha256(tiepoint_csv.getvalue().encode("utf-8")).hexdigest().upper()
 
 
 class MissionReportGenerator:
@@ -236,25 +252,25 @@ class MissionReportGenerator:
         story.append(Image(hist_buf, width=6.8 * inch, height=2.4 * inch))
         story.append(Spacer(1, 8))
 
-        # 5. ISRO SIH Compliance Certification Stamp
+        # 5. Observed registration status
         is_compliant = metrics.rmse_pixels < 0.40 and inliers_cnt >= 4
         cert_color = colors.HexColor("#2e7d32") if is_compliant else colors.HexColor("#d9381e")
         bg_cert = colors.HexColor("#edf7ed") if is_compliant else colors.HexColor("#fdeded")
 
-        cert_status_text = "ISRO SIH PS 26166 COMPLIANCE CERTIFICATION: VERIFIED OPTIMAL" if is_compliant else "ISRO SIH PS 26166 COMPLIANCE: CONDITIONAL"
+        cert_status_text = "OBSERVED REGISTRATION STATUS: THRESHOLD MET" if is_compliant else "OBSERVED REGISTRATION STATUS: REVIEW REQUIRED"
         cert_desc = (
-            f"This certifies that the lunar registration correspondence solution achieved a continuous "
+            f"This report records that the lunar registration correspondence solution achieved a "
             f"sub-pixel RMSE of <b>{metrics.rmse_pixels:.4f} pixels</b> across {inliers_cnt} verified inlier tie-points, "
-            f"rigorously meeting the ISRO SIH PS 26166 requirement of RMSE &lt; 0.40 pixels. "
-            f"Derived with negative-definite Hessian validation and Phase Congruency illumination invariance."
+            f"compared with the SIH PS 26166 reference threshold of RMSE &lt; 0.40 pixels. "
+            f"The dataset provenance must be considered separately; see the accompanying evaluation metadata."
         )
 
-        cert_hash = hashlib.sha256(f"{self.mission_id}:{metrics.rmse_pixels}:{inliers_cnt}".encode()).hexdigest().upper()[:24]
+        report_checksum = compute_tiepoint_csv_sha256(list(matches))
 
         cert_table_data = [
             [Paragraph(f"<b>★ {cert_status_text} ★</b>", ParagraphStyle("CertH", parent=cert_text_style, fontSize=10, textColor=cert_color, alignment=1))],
             [Paragraph(cert_desc, cert_text_style)],
-            [Paragraph(f"Cryptographic Verification Stamp: SHA256 [{cert_hash}] | Auditor: Samanvaya Autonomous Core", ParagraphStyle("CertHash", parent=cert_text_style, fontSize=7, textColor=colors.HexColor("#4a5568")))],
+            [Paragraph(f"Report Checksum (SHA256 of tie-point CSV contents): [{report_checksum}]", ParagraphStyle("CertHash", parent=cert_text_style, fontSize=7, textColor=colors.HexColor("#4a5568")))],
         ]
 
         t_cert = Table(cert_table_data, colWidths=[7.2 * inch])

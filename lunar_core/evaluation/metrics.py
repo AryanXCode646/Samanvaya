@@ -623,7 +623,7 @@ def run_real_evaluation_benchmark(
                 return np.clip((img_f - p_min) / (p_max - p_min), 0.0, 1.0)
             return np.zeros_like(img_f, dtype=np.float32)
 
-    from run_pipeline import run_registration_pipeline
+    from lunar_core.evaluation.benchmark_runner import run_registration_pipeline
 
     scenarios = ["scenario_a", "scenario_c"]
     reports = {}

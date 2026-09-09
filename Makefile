@@ -1,6 +1,6 @@
 # Samanvaya Makefile: Single-Command Automation for ISRO Chandrayaan-2 Registration
 
-.PHONY: install run test clean info help pipeline metrics evaluate verify-raster report-pdf
+.PHONY: install run test clean info help pipeline metrics evaluate verify-raster report-pdf prefetch-weights
 
 PYTHON := python3
 PIP := pip
@@ -15,6 +15,7 @@ help:
 	@echo "  make metrics      - Generate quantitative evaluation metrics report (JSON & CSV)"
 	@echo "  make verify-raster- Real raster out-of-core windowed tile verification"
 	@echo "  make report-pdf   - Generate executive ReportLab PDF mission report"
+	@echo "  make prefetch-weights - Download LoFTR weights before an offline demo"
 	@echo "  make clean        - Remove build artifacts and caches"
 
 install:
@@ -35,7 +36,7 @@ pipeline:
 
 metrics:
 	@echo "📊 Computing evaluation metrics (RMSE, Inlier Ratio, Uniformity)..."
-	$(PYTHON) metrics.py
+	$(PYTHON) -m lunar_core.evaluation.metrics
 
 evaluate: metrics
 
@@ -45,7 +46,11 @@ verify-raster:
 
 report-pdf:
 	@echo "📄 Generating ISRO Mission Registration PDF Report..."
-	$(PYTHON) pdf_reporter.py
+	$(PYTHON) -m lunar_core.evaluation.pdf_reporter
+
+prefetch-weights:
+	@echo "⬇️ Prefetching LoFTR pretrained weights..."
+	$(PYTHON) -c "from kornia.feature import LoFTR; LoFTR(pretrained='outdoor'); print('LoFTR weights ready.')"
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__ */__pycache__ */*/__pycache__

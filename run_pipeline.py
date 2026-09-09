@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 import time
 from typing import Any, Dict, Optional, Tuple
+from typing import Union
 
 import cv2
 import numpy as np
@@ -31,6 +32,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("samanvaya.pipeline_harness")
 
 from lunar_core.models import KeypointMatch, SunAngles, TransformationType
+from lunar_core.models import SensorModality
+from lunar_core.data_io.raster_reader import PlanetaryRasterReader
+from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.preprocessing.contrast import DynamicContrastEqualizer
 from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
@@ -96,6 +100,8 @@ def run_registration_pipeline(
     ref_image: np.ndarray,
     src_sun: Optional[SunAngles] = None,
     ref_sun: Optional[SunAngles] = None,
+    src_gsd: float = 1.0,
+    ref_gsd: float = 1.0,
     dem_data: Optional[np.ndarray] = None,
     photometric_mode: str = "minnaert",
     minnaert_k: float = 0.80,
@@ -123,8 +129,12 @@ def run_registration_pipeline(
 
     if photometric_mode == "minnaert" and src_sun and ref_sun:
         logger.info(f"Applying Topographic Minnaert Photometric Correction (k={minnaert_k})...")
-        src_norm, _ = normalizer.normalize_minnaert(src_f, src_sun, dem_data=dem_data, k=minnaert_k)
-        ref_norm, _ = normalizer.normalize_minnaert(ref_f, ref_sun, dem_data=dem_data, k=minnaert_k)
+        src_norm, _ = normalizer.normalize_minnaert(
+            src_f, src_sun, dem_data=dem_data, pixel_gsd=src_gsd, k=minnaert_k
+        )
+        ref_norm, _ = normalizer.normalize_minnaert(
+            ref_f, ref_sun, dem_data=dem_data, pixel_gsd=ref_gsd, k=minnaert_k
+        )
     elif photometric_mode == "lommel_seeliger" and src_sun and ref_sun:
         logger.info("Applying Lommel-Seeliger Planetary Regolith Scattering Normalization...")
         src_norm, _ = normalizer.normalize(src_f, src_sun, dem_data=dem_data)
@@ -294,8 +304,43 @@ def main() -> None:
         logger.info(f"Loading custom imagery: Source={args.source}, Reference={args.reference}")
         src_img = load_geotiff_file(args.source)
         ref_img = load_geotiff_file(args.reference)
-        sun_src = SunAngles(azimuth_deg=72.5, elevation_deg=28.0)
-        sun_ref = SunAngles(azimuth_deg=85.0, elevation_deg=33.5)
+        sun_src = SunAngles(azimuth_deg=45.0, elevation_deg=45.0)
+        sun_ref = SunAngles(azimuth_deg=45.0, elevation_deg=45.0)
+        src_gsd = 1.0
+        ref_gsd = 1.0
+
+        for image_path, role in ((Path(args.source), "source"), (Path(args.reference), "reference")):
+            xml_path = image_path.with_suffix(".xml")
+            if not xml_path.is_file():
+                logger.warning(
+                    "No same-stem PDS4 label found for %s image (%s); using fallback SunAngles and GSD.",
+                    role,
+                    image_path,
+                )
+                continue
+            try:
+                sun_angles, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
+                    xml_path, allowed_dir=image_path.parent
+                )
+                if role == "source":
+                    sun_src, src_gsd = sun_angles, gsd
+                else:
+                    sun_ref, ref_gsd = sun_angles, gsd
+                logger.info(
+                    "Loaded %s PDS4 metadata: modality=%s, GSD=%s m/px, sun=(%s°, %s°).",
+                    role,
+                    modality.value if isinstance(modality, SensorModality) else modality,
+                    gsd,
+                    sun_angles.azimuth_deg,
+                    sun_angles.elevation_deg,
+                )
+            except (OSError, ValueError) as exc:
+                logger.warning(
+                    "Could not parse %s PDS4 label (%s); using fallback SunAngles and GSD: %s",
+                    role,
+                    xml_path,
+                    exc,
+                )
     elif args.scenario == "synthetic":
         logger.info("Synthesizing high-fidelity lunar crater scene with 180° shadow inversion...")
         sim = LunarTerrainSimulator(size=(256, 256), seed=42)
@@ -385,12 +430,16 @@ def main() -> None:
             azimuth_deg=bm["reference"]["sun_azimuth_deg"],
             elevation_deg=bm["reference"]["sun_elevation_deg"],
         )
+        src_gsd = float(bm["source"].get("gsd_m", 1.0))
+        ref_gsd = float(bm["reference"].get("gsd_m", 1.0))
 
     run_registration_pipeline(
         src_image=src_img,
         ref_image=ref_img,
         src_sun=sun_src,
         ref_sun=sun_ref,
+        src_gsd=src_gsd,
+        ref_gsd=ref_gsd,
         photometric_mode=args.photometric,
         minnaert_k=args.minnaert_k,
         transformation_model=args.model,

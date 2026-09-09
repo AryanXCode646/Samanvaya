@@ -97,6 +97,19 @@ yarn-error.log*
 data/audit/
 data/pipeline/
 data/workspace/
+data/real/
+lunar_core/assets/real_data/*.tif
+lunar_core/assets/real_data/*.tiff
+lunar_core/assets/real_data/*.img
+lunar_core/assets/real_data/*.xml
+evaluation_report.*
+scenario_*_report.*
+*.pdf
+evaluation_report.*
+scenario_*_report.*
+*.pdf
+*.zip
+baseline_test_results.txt
 
 # --- C++ Build Artifacts ---
 csrc/build/

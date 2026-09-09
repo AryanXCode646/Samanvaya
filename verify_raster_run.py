@@ -9,7 +9,7 @@ Demonstrates:
 3. Out-of-core windowed tile processing via PlanetaryTileProcessor avoiding RAM overflows.
 4. Spatial boundary seam deduplication using cKDTree Non-Maximal Suppression.
 5. Global USAC-MAGSAC++ consensus with sub-pixel Taylor-series peak refinement.
-6. Automated invocation of metrics.py generating structured JSON and CSV reports with ISRO badge.
+6. Automated invocation of the evaluation metrics module generating structured JSON and CSV reports.
 """
 
 from __future__ import annotations
@@ -95,6 +95,12 @@ def run_raster_verification(
     output_json: str = "evaluation_report.json",
     output_csv: str = "evaluation_report.csv",
     output_warped_tif: Optional[str] = None,
+    ref_sun: Optional[SunAngles] = None,
+    src_sun: Optional[SunAngles] = None,
+    ref_gsd: float = 1.0,
+    src_gsd: float = 1.0,
+    ref_modality: SensorModality = SensorModality.LRO_NAC,
+    src_modality: SensorModality = SensorModality.OHRC,
 ) -> EvaluationReport:
     """
     Executes full out-of-core windowed registration on real lunar rasters.
@@ -108,8 +114,9 @@ def run_raster_verification(
     logger.info(f"Ingesting Master Reference GeoTIFF: {ref_raster_path}")
     ref_geo = PlanetaryRasterReader.read_georaster(
         ref_raster_path,
-        modality=SensorModality.LRO_NAC,
-        sun_angles=SunAngles(azimuth_deg=85.0, elevation_deg=33.5),
+        modality=ref_modality,
+        gsd_fallback=ref_gsd,
+        sun_angles=ref_sun or SunAngles(azimuth_deg=45.0, elevation_deg=45.0),
     )
     logger.info(
         f"  • Reference Dimensions : {ref_geo.data.shape[1]}x{ref_geo.data.shape[0]} px | "
@@ -119,8 +126,9 @@ def run_raster_verification(
     logger.info(f"Ingesting Moving Target GeoTIFF: {src_raster_path}")
     src_geo = PlanetaryRasterReader.read_georaster(
         src_raster_path,
-        modality=SensorModality.OHRC,
-        sun_angles=SunAngles(azimuth_deg=72.5, elevation_deg=28.0),
+        modality=src_modality,
+        gsd_fallback=src_gsd,
+        sun_angles=src_sun or SunAngles(azimuth_deg=45.0, elevation_deg=45.0),
     )
     logger.info(
         f"  • Moving Dimensions    : {src_geo.data.shape[1]}x{src_geo.data.shape[0]} px | "
@@ -268,6 +276,13 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    ref_sun = SunAngles(azimuth_deg=45.0, elevation_deg=45.0)
+    src_sun = SunAngles(azimuth_deg=45.0, elevation_deg=45.0)
+    ref_gsd = 1.0
+    src_gsd = 1.0
+    ref_modality = SensorModality.LRO_NAC
+    src_modality = SensorModality.OHRC
+
     if args.ref and args.source:
         ref_path = Path(args.ref)
         src_path = Path(args.source)
@@ -277,9 +292,44 @@ def main() -> None:
         if not src_path.exists():
             logger.error(f"Source file not found: {src_path}")
             sys.exit(1)
+
+        for image_path, role in ((ref_path, "reference"), (src_path, "source")):
+            xml_path = image_path.with_suffix(".xml")
+            if not xml_path.is_file():
+                logger.warning(
+                    "No same-stem PDS4 label found for %s image (%s); using fallback SunAngles and GSD.",
+                    role,
+                    image_path,
+                )
+                continue
+            try:
+                sun_angles, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
+                    xml_path, allowed_dir=image_path.parent
+                )
+                if role == "reference":
+                    ref_sun, ref_gsd, ref_modality = sun_angles, gsd, modality
+                else:
+                    src_sun, src_gsd, src_modality = sun_angles, gsd, modality
+                logger.info(
+                    "Loaded %s PDS4 metadata: modality=%s, GSD=%s m/px, sun=(%s°, %s°).",
+                    role,
+                    modality.value,
+                    gsd,
+                    sun_angles.azimuth_deg,
+                    sun_angles.elevation_deg,
+                )
+            except (OSError, ValueError) as exc:
+                logger.warning(
+                    "Could not parse %s PDS4 label (%s); using fallback SunAngles and GSD: %s",
+                    role,
+                    xml_path,
+                    exc,
+                )
     else:
         ref_path, src_path, ref_desc, src_desc = resolve_sample_paths(args.scenario)
         logger.info(f"Loaded scenario [{args.scenario}]: {ref_desc} vs {src_desc}")
+        ref_sun = SunAngles(azimuth_deg=85.0, elevation_deg=33.5)
+        src_sun = SunAngles(azimuth_deg=72.5, elevation_deg=28.0)
 
     report = run_raster_verification(
         ref_raster_path=ref_path,
@@ -291,6 +341,12 @@ def main() -> None:
         output_json=args.json,
         output_csv=args.csv,
         output_warped_tif=args.warped,
+        ref_sun=ref_sun,
+        src_sun=src_sun,
+        ref_gsd=ref_gsd,
+        src_gsd=src_gsd,
+        ref_modality=ref_modality,
+        src_modality=src_modality,
     )
 
     if not report.meets_isro_mandate:

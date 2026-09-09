@@ -1,7 +1,7 @@
 # Core Computer Vision, Deep Learning, and Geospatial Stack (Locked Version Pins)
 torch>=2.0.0,<3.0.0
 kornia>=0.7.0,<0.9.0
-opencv-python-headless>=4.8.0,<5.1.0
+opencv-contrib-python-headless>=4.8.0,<5.1.0
 rasterio>=1.3.0,<1.6.0
 scipy>=1.10.0,<2.0.0
 scikit-image>=0.21.0,<0.27.0
@@ -18,5 +18,6 @@ uvicorn>=0.22.0,<1.0.0
 pytest>=7.4.0,<10.0.0
 defusedxml>=0.7.1,<1.0.0
 reportlab>=4.0.0,<5.0.0
+tifffile>=2023.7.0,<2026.0.0
 websockets>=12.0,<15.0
 httpx>=0.24.0,<1.0.0
