@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from lunar_core.data_io.mission_product import MissionProduct
@@ -20,9 +21,43 @@ class ProductPair:
     gsd_ratio: Optional[float]
     status: str
     reason: str
+    source_product: Optional[MissionProduct] = None
+    target_product: Optional[MissionProduct] = None
+    pair_id: Optional[str] = None
+    intersection_area: Optional[float] = None
+    source_area: Optional[float] = None
+    target_area: Optional[float] = None
+    acquisition_time_delta_seconds: Optional[float] = None
+    pair_type: Optional[str] = None
+    selection_method: str = "metadata"
+
+    def __post_init__(self) -> None:
+        if self.pair_id is None:
+            self.pair_id = f"{self.source_product_id}__{self.target_product_id}"
+        if self.pair_type is None:
+            self.pair_type = f"{self.source_mission or 'unknown'}:{self.source_instrument or 'unknown'}__{self.target_mission or 'unknown'}:{self.target_instrument or 'unknown'}"
 
     def to_dict(self) -> dict[str, object]:
-        return self.__dict__.copy()
+        return {
+            "pair_id": self.pair_id,
+            "source_product_id": self.source_product_id,
+            "target_product_id": self.target_product_id,
+            "source_mission": self.source_mission,
+            "target_mission": self.target_mission,
+            "source_instrument": self.source_instrument,
+            "target_instrument": self.target_instrument,
+            "overlap_ratio": self.overlap_ratio,
+            "intersection_area": self.intersection_area,
+            "source_area": self.source_area,
+            "target_area": self.target_area,
+            "gsd_ratio": self.gsd_ratio,
+            "acquisition_time_delta_seconds": self.acquisition_time_delta_seconds,
+            "pair_type": self.pair_type,
+            "selection_method": self.selection_method,
+            "selection_status": self.status,
+            "status": self.status,
+            "reason": self.reason,
+        }
 
 
 def _distance_degrees(first: MissionProduct, second: MissionProduct) -> Optional[float]:
@@ -78,20 +113,32 @@ def _intersection_area(first: list[tuple[float, float]], second: list[tuple[floa
     return _polygon_area(clipped)
 
 
-def _footprint_overlap(first: MissionProduct, second: MissionProduct) -> Optional[float]:
+def _footprint_metrics(first: MissionProduct, second: MissionProduct) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
     if not first.footprint or not second.footprint:
-        return None
+        return None, None, None, None
     first_area = _polygon_area(first.footprint)
     second_area = _polygon_area(second.footprint)
     if first_area <= 0 or second_area <= 0:
+        return None, first_area, second_area, None
+    intersection = _intersection_area(first.footprint, second.footprint)
+    return intersection / min(first_area, second_area), intersection, first_area, second_area
+
+
+def _acquisition_delta(first: MissionProduct, second: MissionProduct) -> Optional[float]:
+    if not first.acquisition_time or not second.acquisition_time:
         return None
-    return _intersection_area(first.footprint, second.footprint) / min(first_area, second_area)
+    try:
+        first_time = datetime.fromisoformat(first.acquisition_time.replace("Z", "+00:00"))
+        second_time = datetime.fromisoformat(second.acquisition_time.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return abs((first_time - second_time).total_seconds())
 
 
 def propose_pair(source: MissionProduct, target: MissionProduct, max_center_distance_deg: float = 1.0) -> ProductPair:
     """Propose a pair only when available metadata supports a safe decision."""
     distance = _distance_degrees(source, target)
-    overlap_ratio = _footprint_overlap(source, target)
+    overlap_ratio, intersection_area, source_area, target_area = _footprint_metrics(source, target)
     gsd_ratio = None
     if source.gsd_m and target.gsd_m and source.gsd_m > 0 and target.gsd_m > 0:
         gsd_ratio = max(source.gsd_m, target.gsd_m) / min(source.gsd_m, target.gsd_m)
@@ -105,6 +152,13 @@ def propose_pair(source: MissionProduct, target: MissionProduct, max_center_dist
         target_instrument=target.instrument,
         overlap_ratio=overlap_ratio,
         gsd_ratio=gsd_ratio,
+        source_product=source,
+        target_product=target,
+        intersection_area=intersection_area,
+        source_area=source_area,
+        target_area=target_area,
+        acquisition_time_delta_seconds=_acquisition_delta(source, target),
+        selection_method="footprint_intersection" if overlap_ratio is not None else "center_proximity_prefilter",
     )
     if overlap_ratio is not None:
         if overlap_ratio <= 0:

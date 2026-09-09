@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from lunar_core.data_io.mission_catalog import inspect_product, resolve_product_label
 from lunar_core.data_io.raster_reader import PlanetaryRasterReader
 
-SUPPORTED_IMAGE_SUFFIXES = {".tif", ".tiff", ".img"}
+SUPPORTED_IMAGE_SUFFIXES = {".tif", ".tiff", ".img", ".qub"}
 
 
 def main() -> int:
@@ -32,29 +33,31 @@ def main() -> int:
 
     failures = 0
     for image_path in images:
-        label_path = image_path.with_suffix(".xml")
         print(f"\nProduct: {image_path}")
-        if not label_path.is_file():
-            print(f"ERROR: same-stem PDS4 label not found: {label_path}")
+        label_path = resolve_product_label(image_path)
+        if label_path is None:
+            print("ERROR: canonical PDS4 label resolution was ambiguous or missing")
             failures += 1
             continue
         try:
-            sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
-                label_path, allowed_dir=image_path.parent
-            )
-            raster = PlanetaryRasterReader.read_georaster(
-                image_path,
-                modality=modality,
-                gsd_fallback=gsd,
-                allowed_dir=image_path.parent,
-                sun_angles=sun,
-            )
-            print(f"Shape: {raster.shape}")
-            print(f"GSD: {raster.gsd_meters:g} m/px")
-            print(f"Modality: {raster.modality.value}")
-            print(f"Sun azimuth: {raster.sun_angles.azimuth_deg:g} degrees")
-            print(f"Sun elevation: {raster.sun_angles.elevation_deg:g} degrees")
-            print(f"CRS: {raster.crs}")
+            product = inspect_product(image_path, root_dir=data_dir)
+            status = product.status.value if hasattr(product.status, "value") else product.status
+            print(f"Status: {status}")
+            print(f"Mission: {product.mission or 'unknown'}")
+            print(f"Instrument: {product.instrument or 'unknown'}")
+            print(f"Shape: ({product.height}, {product.width})")
+            print(f"Bands: {product.band_count or 1}")
+            print(f"GSD: {product.gsd_m if product.gsd_m is not None else 'unknown'} m/px")
+            print(f"Sun azimuth: {product.sun_azimuth_deg if product.sun_azimuth_deg is not None else 'unknown'} degrees")
+            print(f"Sun elevation: {product.sun_elevation_deg if product.sun_elevation_deg is not None else 'unknown'} degrees")
+            if image_path.suffix.lower() == ".img":
+                mapped = PlanetaryRasterReader.open_pds4_memmap(image_path, label_path, allowed_dir=data_dir)
+                print(f"Windowed 2-D access: {mapped.shape}")
+            elif image_path.suffix.lower() == ".qub":
+                mapped, shape = PlanetaryRasterReader.open_pds4_spectral_memmap(image_path, label_path, allowed_dir=data_dir)
+                print(f"Windowed spectral access: {shape}; first sample={float(mapped[0, 0, 0])}")
+            if status in {"invalid", "unsupported"}:
+                failures += 1
         except Exception as exc:
             print(f"ERROR: {type(exc).__name__}: {exc}")
             failures += 1

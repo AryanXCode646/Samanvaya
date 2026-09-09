@@ -5,6 +5,8 @@
 
 > **IIRS scope:** IIRS products are catalog-aware, but multi-band spectral-cube preprocessing and spectral-to-2-D correspondence are not yet implemented in the registration runner.
 
+> **Local real-product evidence:** The ingestion harness has been exercised against locally supplied Chandrayaan-2 OHRC and Chandrayaan-1 HySI PDS4 labels using sparse temporary files. OHRC metadata and lazy 2-D access passed; HySI was classified as a 64-band partial spectral product. No registration accuracy claim is made from this metadata/access check.
+
 [![ISRO SIH PS 26166](https://img.shields.io/badge/ISRO-SIH%20PS%2026166-0284c7?style=for-the-badge&logo=nasa&logoColor=white)](https://github.com/AryanXCode646/Samanvaya)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)

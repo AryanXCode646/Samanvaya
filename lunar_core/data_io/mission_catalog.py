@@ -58,6 +58,8 @@ def resolve_product_label(image_path: Path) -> Optional[Path]:
 
 def _mission_from_text(value: str) -> Optional[str]:
     upper = value.upper()
+    if any(token in upper for token in ("CHANDRAYAAN-1", "CHANDRAYAAN 1", "CHANDRAYAAN1", "CH1")):
+        return "Chandrayaan-1"
     if any(token in upper for token in ("CHANDRAYAAN-2", "CHANDRAYAAN 2", "CH2", "CHANDRAYAAN2")):
         return "Chandrayaan-2"
     if "LRO" in upper or "LUNAR RECONNAISSANCE ORBITER" in upper:
@@ -69,6 +71,8 @@ def _mission_from_text(value: str) -> Optional[str]:
 
 def _instrument_from_text(value: str) -> Optional[str]:
     upper = value.upper()
+    if any(token in upper for token in ("HYSI", "HYPER SPECTRAL IMAGER")):
+        return "HYSI"
     if any(token in upper for token in ("OHRC", "HIGH RESOLUTION CAMERA")):
         return "OHRC"
     if any(token in upper for token in ("TMC", "TERRAIN MAPPING CAMERA")):
@@ -120,6 +124,13 @@ def _infer_mission_instrument(image_path: Path, label_root: Any) -> tuple[Option
         "spacecraft_name",
         "spacecraft",
     )
+    for node in label_root.iter():
+        if _tag_name(node) == "investigation_area":
+            mission_values.extend(
+                child.text.strip()
+                for child in node.iter()
+                if _tag_name(child) == "name" and child.text
+            )
     instrument_values = _text_candidates(
         label_root,
         "instrument_name",
@@ -128,7 +139,15 @@ def _infer_mission_instrument(image_path: Path, label_root: Any) -> tuple[Option
         "sensor_name",
         "sensor_id",
         "camera_name",
+        "instrument_type",
     )
+    for node in label_root.iter():
+        if _tag_name(node) == "observing_system_component" and node.attrib.get("type", "").lower() == "instrument":
+            instrument_values.extend(
+                child.text.strip()
+                for child in node.iter()
+                if _tag_name(child) in {"name", "description"} and child.text
+            )
     product_identifier = _first_value(label_root, "product_id", "product_identifier", "logical_identifier", "product_name")
 
     for value in mission_values:
@@ -152,6 +171,8 @@ def _infer_mission_instrument(image_path: Path, label_root: Any) -> tuple[Option
             return mission, instrument, "product_id"
 
     product_id = image_path.stem.upper()
+    if "CH1" in product_id or "CHANDRAYAAN1" in product_id:
+        return "Chandrayaan-1", _first_instrument_from_values(instrument_values, combined), "product_id"
     if "CH2" in product_id or "CHANDRAYAAN" in product_id:
         return "Chandrayaan-2", _first_instrument_from_values(instrument_values, combined), "product_id"
     if "LRO" in product_id or "LROC" in product_id or "NAC" in product_id:
@@ -295,8 +316,13 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
             product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
             product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
             product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(label_root, "product_type")
-            product.status = ProductStatus.VALIDATED
-            product.validation_status = ProductStatus.VALIDATED.value
+            if (product.band_count or 0) > 1:
+                product.status = ProductStatus.PARTIAL
+                product.validation_status = ProductStatus.PARTIAL.value
+                product.validation_message = "Spectral cube metadata parsed; 2-D registration representation is not implemented."
+            else:
+                product.status = ProductStatus.VALIDATED
+                product.validation_status = ProductStatus.VALIDATED.value
     except Exception as exc:
         product.status = ProductStatus.INVALID
         product.validation_status = ProductStatus.INVALID.value
