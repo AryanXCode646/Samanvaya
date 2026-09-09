@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import time
+from datetime import datetime, timezone
+from importlib.metadata import version as package_version, PackageNotFoundError
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -13,6 +17,13 @@ from lunar_core.data_io import PlanetaryRasterReader, PlanetaryTileProcessor
 from lunar_core.evaluation.metrics import EvaluationEngine
 from lunar_core.models import GeoRaster, SensorModality, SunAngles
 from lunar_core.pipeline import LunarCorePipeline
+
+
+def _software_version() -> str:
+    try:
+        return package_version("samanvaya")
+    except PackageNotFoundError:
+        return "uninstalled-source-tree"
 
 IMAGE_SUFFIXES = {".tif", ".tiff", ".img"}
 
@@ -167,6 +178,8 @@ def read_product(image_path: Path, modality: SensorModality) -> Tuple[GeoRaster,
 
 
 def run(args: argparse.Namespace) -> None:
+    started_at = datetime.now(timezone.utc).isoformat()
+    started = time.perf_counter()
     raw_dir = Path(args.raw_dir).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -198,6 +211,49 @@ def run(args: argparse.Namespace) -> None:
     )
     report.export_json(output_dir / "evaluation_report.json")
     report.export_csv(output_dir / "evaluation_report.csv")
+    provenance = {
+        "dataset_class": "real_mission_data",
+        "source": {
+            "mission": "Chandrayaan-2",
+            "instrument": ch2.modality.value,
+            "product_id": ch2_path.stem,
+            "file": str(ch2_path),
+            "label": str(ch2_path.with_suffix(".xml")),
+            "gsd_m": ch2.gsd_meters,
+            "sun_azimuth_deg": ch2.sun_angles.azimuth_deg if ch2.sun_angles else None,
+            "sun_elevation_deg": ch2.sun_angles.elevation_deg if ch2.sun_angles else None,
+            "masked_pixels": ch2_masked,
+        },
+        "target": {
+            "mission": "LRO",
+            "instrument": lro.modality.value,
+            "product_id": lro_path.stem,
+            "file": str(lro_path),
+            "label": str(lro_path.with_suffix(".xml")),
+            "gsd_m": lro.gsd_meters,
+            "sun_azimuth_deg": lro.sun_angles.azimuth_deg if lro.sun_angles else None,
+            "sun_elevation_deg": lro.sun_angles.elevation_deg if lro.sun_angles else None,
+            "masked_pixels": lro_masked,
+        },
+        "pipeline": {
+            "matcher": matcher_path,
+            "fallback_used": "rift" in matcher_path.lower(),
+            "photometric_correction": "enabled",
+            "tile_threshold": args.tile_threshold,
+            "tile_size": args.tile_size,
+            "overlap": args.overlap,
+            "software_version": _software_version(),
+        },
+        "execution": {
+            "timestamp_utc": started_at,
+            "runtime_seconds": time.perf_counter() - started,
+            "real_rmse_pixels": report.rmse_pixels,
+            "inlier_count": report.inlier_count,
+            "ground_truth_available": False,
+            "metric_note": "Reprojection/consensus metric; no independent ground truth supplied.",
+        },
+    }
+    (output_dir / "provenance.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
     print(f"Site: {args.site}")
     print(f"Chandrayaan-2: {ch2_path.name} ({ch2.shape}, {ch2.gsd_meters:g} m/px)")
     print(f"LRO NAC: {lro_path.name} ({lro.shape}, {lro.gsd_meters:g} m/px)")
@@ -205,6 +261,7 @@ def run(args: argparse.Namespace) -> None:
     print(f"Matcher path: {matcher_path}")
     print(f"RMSE: {report.rmse_pixels:.4f} px; inliers: {report.inlier_count}")
     print(f"Reports: {output_dir / 'evaluation_report.json'}, {output_dir / 'evaluation_report.csv'}")
+    print(f"Provenance: {output_dir / 'provenance.json'}")
 
 
 def main() -> None:

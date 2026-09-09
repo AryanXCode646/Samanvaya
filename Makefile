@@ -19,16 +19,16 @@ help:
 	@echo "  make clean        - Remove build artifacts and caches"
 
 install:
-	$(PIP) install -r requirements.txt
-	$(PIP) install -e .
+	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m pip install -e .
 
 run:
 	@echo "🚀 Launching Samanvaya Streamlit Portal on http://localhost:8501 ..."
-	streamlit run app.py --server.port 8501
+	$(PYTHON) -m streamlit run app.py --server.port 8501 --server.headless true --browser.gatherUsageStats false
 
 test:
 	@echo "🧪 Running automated verification test suite..."
-	pytest tests/ -v
+	$(PYTHON) -m pytest tests/ -v
 
 pipeline:
 	@echo "🛰️ Running end-to-end registration pipeline..."

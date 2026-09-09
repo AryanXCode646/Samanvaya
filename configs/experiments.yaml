@@ -1,0 +1,5 @@
+experiments:
+  - name: baseline
+    config: configs/synthetic.yaml
+  - name: real_pair
+    config: configs/real_data.yaml

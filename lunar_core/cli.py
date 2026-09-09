@@ -6,6 +6,8 @@ ISRO Chandrayaan-2 Lunar Optical Image Registration Framework (SIH PS 26166).
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -187,6 +189,85 @@ def cmd_catalog_scan(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def cmd_catalog_show(args: argparse.Namespace) -> None:
+    """Display one catalog manifest as JSON."""
+    manifest = Path(args.manifest)
+    if not manifest.is_file():
+        raise FileNotFoundError(f"Catalog manifest does not exist: {manifest}")
+    with manifest.open(newline="", encoding="utf-8") as stream:
+        print(json.dumps(list(csv.DictReader(stream)), indent=2))
+
+
+def _read_manifest(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Catalog manifest does not exist: {path}")
+    with path.open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def cmd_pair_discover(args: argparse.Namespace) -> None:
+    """Report conservative candidate pairs from a catalog manifest."""
+    from lunar_core.data_io.mission_product import MissionProduct
+    from lunar_core.data_io.pair_selector import propose_pair
+
+    rows = _read_manifest(Path(args.manifest))
+    products = []
+    for row in rows:
+        if row.get("status") != "validated":
+            continue
+        products.append(
+            MissionProduct(
+                mission=row.get("mission") or None,
+                instrument=row.get("instrument") or None,
+                product_id=row["product_id"],
+                image_path=Path(row["image_path"]),
+                gsd_m=float(row["gsd_m"]) if row.get("gsd_m") else None,
+                center_lat_deg=float(row["center_lat_deg"]) if row.get("center_lat_deg") else None,
+                center_lon_deg=float(row["center_lon_deg"]) if row.get("center_lon_deg") else None,
+                status=row["status"],
+            )
+        )
+    if args.mission:
+        products = [product for product in products if product.mission == args.mission]
+    candidates = [
+        propose_pair(source, target).to_dict()
+        for index, source in enumerate(products)
+        for target in products[index + 1 :]
+        if source.product_id != target.product_id
+    ]
+    selected = [pair for pair in candidates if pair["status"] == "candidate"]
+    print(json.dumps(selected if args.candidates_only else candidates, indent=2))
+
+
+def cmd_register(args: argparse.Namespace) -> None:
+    """Delegate real-pair registration to the existing provenance-producing runner."""
+    runner = _PROJECT_ROOT / "scripts" / "register_real_pair.py"
+    command = [
+        sys.executable,
+        str(runner),
+        "--raw-dir",
+        args.raw_dir,
+        "--output-dir",
+        args.output_dir,
+        "--chandrayaan",
+        args.source,
+        "--lro",
+        args.target,
+        "--site",
+        args.site,
+    ]
+    result = subprocess.run(command)
+    raise SystemExit(result.returncode)
+
+
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    """Display a previously generated evaluation report without recomputing it."""
+    report = Path(args.report)
+    if not report.is_file():
+        raise FileNotFoundError(f"Evaluation report does not exist: {report}")
+    print(report.read_text(encoding="utf-8"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="samanvaya",
@@ -223,6 +304,32 @@ def main() -> None:
     p_catalog_scan.add_argument("root", help="Directory containing downloaded mission products")
     p_catalog_scan.add_argument("--output", default="data/metadata/products.csv", help="CSV manifest output path")
     p_catalog_scan.set_defaults(func=cmd_catalog_scan)
+    p_catalog_show = catalog_commands.add_parser("show", help="Display a CSV catalog manifest")
+    p_catalog_show.add_argument("manifest", help="CSV manifest path")
+    p_catalog_show.set_defaults(func=cmd_catalog_show)
+
+    # samanvaya pair discover
+    p_pair = subparsers.add_parser("pair", help="Discover metadata-supported product pairs")
+    pair_commands = p_pair.add_subparsers(dest="pair_command", required=True)
+    p_pair_discover = pair_commands.add_parser("discover", help="Discover candidate pairs from a catalog")
+    p_pair_discover.add_argument("--manifest", default="data/metadata/products.csv")
+    p_pair_discover.add_argument("--mission", help="Restrict candidates to one mission")
+    p_pair_discover.add_argument("--candidates-only", action="store_true")
+    p_pair_discover.set_defaults(func=cmd_pair_discover)
+
+    # samanvaya register
+    p_register = subparsers.add_parser("register", help="Register a supplied Chandrayaan-2/LRO pair")
+    p_register.add_argument("--source", required=True, help="Chandrayaan-2 product filename or path")
+    p_register.add_argument("--target", required=True, help="LRO NAC product filename or path")
+    p_register.add_argument("--raw-dir", default="data/real/raw")
+    p_register.add_argument("--output-dir", default="data/real/results")
+    p_register.add_argument("--site", default="unspecified")
+    p_register.set_defaults(func=cmd_register)
+
+    # samanvaya evaluate
+    p_evaluate = subparsers.add_parser("evaluate", help="Display a generated evaluation report")
+    p_evaluate.add_argument("--report", required=True, help="Path to evaluation_report.json")
+    p_evaluate.set_defaults(func=cmd_evaluate)
 
     # samanvaya info
     p_info = subparsers.add_parser("info", help="Display system and mission configuration")
