@@ -346,6 +346,8 @@ if img_source is not None and img_ref is not None:
             cap_per_cell=anms_cap,
             magsac_reproj_threshold=magsac_thresh,
         )
+        if not matcher.is_pretrained:
+            st.error("LoFTR pretrained weights are unavailable; results are not meaningful.")
 
         src_tensor, norm_src = matcher.prepare_geotiff_array(pc_src.max_moment)
         ref_tensor, norm_ref = matcher.prepare_geotiff_array(pc_ref.max_moment)

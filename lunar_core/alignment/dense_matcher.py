@@ -13,6 +13,7 @@ Implements the SIH PS 26166 correspondence pipeline:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import Iterator, List, Optional, Tuple, Union
 import cv2
 import numpy as np
@@ -20,6 +21,8 @@ import torch
 import kornia.feature as KF
 
 from lunar_core.models import KeypointMatch
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -61,6 +64,7 @@ class DenseLoFTRMatcher:
         self.cap_per_cell = cap_per_cell
         self.patch_radius = patch_radius
         self.reproj_threshold = magsac_reproj_threshold
+        self.is_pretrained = False
 
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -70,7 +74,13 @@ class DenseLoFTRMatcher:
         # Initialize LoFTR backbone
         try:
             self.loftr = KF.LoFTR(pretrained=pretrained).to(self.device)
-        except Exception:
+            self.is_pretrained = pretrained is not None
+        except Exception as exc:
+            logger.warning(
+                "LoFTR pretrained weights failed to load (%s); untrained random "
+                "weights are being used and results are not meaningful.",
+                exc,
+            )
             self.loftr = KF.LoFTR(pretrained=None).to(self.device)
         self.loftr.eval()
 
@@ -126,12 +136,15 @@ class DenseLoFTRMatcher:
 
         input_dict = {"image0": source_tensor, "image1": ref_tensor}
 
-        with torch.no_grad():
+        with torch.inference_mode():
             out = self.loftr(input_dict)
 
         pts_src = out["keypoints0"].detach().cpu().numpy()
         pts_ref = out["keypoints1"].detach().cpu().numpy()
         conf = out["confidence"].detach().cpu().numpy()
+        del out
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
 
         matches: List[KeypointMatch] = []
         h_src, w_src = src_shape

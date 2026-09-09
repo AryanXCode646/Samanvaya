@@ -35,7 +35,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     sympy \
     astropy \
     matplotlib \
-    opencv-python-headless \
+    opencv-contrib-python-headless \
     tifffile \
     pydantic \
     fastapi \
@@ -54,8 +54,9 @@ RUN pip install --no-cache-dir rasterio
 # 3. Copy application codebase
 COPY . /app
 
-# 4. Install Samanvaya package in editable mode
-RUN pip install -e .
+# 4. Install the pinned dependency set, then install the package without a second dependency pass
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -e . --no-deps
 
 EXPOSE 8501
 

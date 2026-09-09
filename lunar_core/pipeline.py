@@ -5,7 +5,7 @@ Unified Clean Architecture Pipeline Facade for Lunar Core.
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import List, Optional
 import cv2
 import numpy as np
 

@@ -71,6 +71,8 @@ def cmd_align(args: argparse.Namespace) -> None:
         cap_per_cell=args.cap,
         magsac_reproj_threshold=args.reproj_threshold,
     )
+    if not matcher.is_pretrained:
+        print("WARNING: LoFTR pretrained weights unavailable; results are not meaningful.")
 
     inliers, H, warped = matcher.match(
         source_image=raster_src.data,
