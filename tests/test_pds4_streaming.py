@@ -5,6 +5,7 @@ from rasterio.windows import Window
 
 from lunar_core.data_io.raster_reader import PlanetaryRasterReader
 from lunar_core.data_io.tile_processor import PlanetaryTileProcessor
+from lunar_core.preprocessing.spectral import SpectralCube
 
 
 def _write_sample_product(tmp_path: Path) -> tuple[Path, Path]:
@@ -50,3 +51,13 @@ def test_tile_reader_slices_detached_pds_image(tmp_path: Path):
     p1, p99 = np.percentile(expected, [1.0, 99.0])
     expected = np.clip((expected - p1) / max(p99 - p1, 1e-5), 0.0, 1.0)
     np.testing.assert_allclose(tile, expected, atol=1e-6)
+
+
+def test_spectral_cube_exposes_deterministic_2d_representations():
+    data = np.arange(3 * 2 * 2, dtype=np.float32).reshape(3, 2, 2)
+    cube = SpectralCube(data)
+
+    np.testing.assert_array_equal(cube.to_image("band_mean"), np.mean(data, axis=0))
+    pca = cube.to_image("pca")
+    assert pca.shape == (2, 2)
+    np.testing.assert_allclose(pca, cube.to_image("pca"))

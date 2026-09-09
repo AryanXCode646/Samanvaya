@@ -17,6 +17,7 @@ class SensorModality(str, Enum):
     TMC2_FORE = "CH2_TMC2_FORE"
     TMC2_AFT = "CH2_TMC2_AFT"
     IIRS = "IIRS"          # Chandrayaan-2 Imaging Infrared Spectrometer (~80m)
+    HYSI = "HYSI"          # Chandrayaan-1 Hyper Spectral Imager (~80m)
     LRO_NAC = "LRO_NAC"    # Lunar Reconnaissance Orbiter Narrow Angle Camera (~0.5m)
     SYNTHETIC = "SYNTHETIC"
 

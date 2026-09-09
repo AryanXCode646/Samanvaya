@@ -290,6 +290,79 @@ class PlanetaryRasterReader:
             raise ValueError(f"PDS4 image is truncated: expected {expected_size} bytes, found {safe_image.stat().st_size}")
         return np.memmap(safe_image, dtype=dtype, mode="r", offset=byte_offset, shape=(height, width), order="C")
 
+    @staticmethod
+    def open_pds4_spectral_memmap(
+        image_path: Union[str, Path],
+        label_xml_path: Union[str, Path],
+        allowed_dir: Optional[Path] = None,
+    ) -> tuple[np.memmap, tuple[int, int, int]]:
+        """Open a PDS4 Array_3D_Spectrum as a bands-first lazy array."""
+        safe_image = sanitize_path(image_path, allowed_dir=allowed_dir)
+        safe_label = sanitize_path(label_xml_path, allowed_dir=allowed_dir)
+        try:
+            root = defused_ET.parse(safe_label, forbid_dtd=True, forbid_entities=True).getroot()
+        except Exception as exc:
+            raise ValueError(f"Invalid or unsafe PDS4 XML label: {safe_label}") from exc
+
+        array = next(
+            (node for node in root.iter() if node.tag.rsplit("}", 1)[-1].lower() == "array_3d_spectrum"),
+            None,
+        )
+        if array is None:
+            raise ValueError(f"PDS4 label has no Array_3D_Spectrum: {safe_label}")
+
+        axes: list[tuple[int, str, int]] = []
+        for axis in array.iter():
+            if axis.tag.rsplit("}", 1)[-1].lower() != "axis_array":
+                continue
+            name = next(
+                (child.text.strip().upper() for child in axis if child.text and child.tag.rsplit("}", 1)[-1].lower() == "axis_name"),
+                "",
+            )
+            elements = next(
+                (int(child.text.strip()) for child in axis if child.text and child.tag.rsplit("}", 1)[-1].lower() == "elements"),
+                0,
+            )
+            sequence = next(
+                (int(child.text.strip()) for child in axis if child.text and child.tag.rsplit("}", 1)[-1].lower() == "sequence_number"),
+                len(axes) + 1,
+            )
+            if elements <= 0:
+                raise ValueError(f"Invalid PDS4 spectral axis {name!r}: {elements}")
+            axes.append((sequence, name, elements))
+        if len(axes) != 3:
+            raise ValueError(f"Expected three PDS4 spectral axes, found {len(axes)}")
+
+        ordered = sorted(axes)
+        shape = tuple(axis[2] for axis in ordered)
+        names = [axis[1] for axis in ordered]
+        if names[0] != "BAND" or names[1:] != ["LINE", "SAMPLE"]:
+            raise ValueError(f"Unsupported PDS4 spectral axis order: {names}")
+        element = next(
+            (node for node in array.iter() if node.tag.rsplit("}", 1)[-1].lower() == "element_array"),
+            None,
+        )
+        data_type = next(
+            (child.text.strip().upper() for child in element or [] if child.text and child.tag.rsplit("}", 1)[-1].lower() == "data_type"),
+            "MSB_INTEGER",
+        )
+        bits = 32 if "REAL" in data_type else 16
+        if "IEEE754L SBSINGLE" in data_type.replace(" ", "") or "LSBSINGLE" in data_type:
+            dtype = np.dtype("<f4")
+        elif "REAL" in data_type:
+            dtype = np.dtype(">f4" if "MSB" in data_type else "<f4")
+        else:
+            raise ValueError(f"Unsupported PDS4 spectral sample type: {data_type}")
+        offset_node = next(
+            (node for node in array if node.tag.rsplit("}", 1)[-1].lower() == "offset" and node.text),
+            None,
+        )
+        offset = int(float(offset_node.text)) if offset_node is not None else 0
+        expected_size = offset + int(np.prod(shape)) * dtype.itemsize
+        if safe_image.stat().st_size < expected_size:
+            raise ValueError(f"PDS4 spectral cube is truncated: expected {expected_size} bytes, found {safe_image.stat().st_size}")
+        return np.memmap(safe_image, dtype=dtype, mode="r", offset=offset, shape=shape, order="C"), shape
+
     read_georaster = read_geotiff
 
     @staticmethod
@@ -438,6 +511,9 @@ class PlanetaryRasterReader:
             gsd = gsd if gsd != 1.0 else 5.0
         elif "IIRS" in sensor_text:
             modality = SensorModality.IIRS
+            gsd = gsd if gsd != 1.0 else 80.0
+        elif "HYSI" in sensor_text or "HYPER SPECTRAL IMAGER" in sensor_text:
+            modality = SensorModality.HYSI
             gsd = gsd if gsd != 1.0 else 80.0
         elif "NAC" in sensor_text or "LROC" in sensor_text:
             modality = SensorModality.LRO_NAC

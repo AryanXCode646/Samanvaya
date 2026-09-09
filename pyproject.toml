@@ -44,4 +44,7 @@ include = ["lunar_core*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "real_data: requires locally supplied mission products and skips when unavailable",
+]
 

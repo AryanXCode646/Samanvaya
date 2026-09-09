@@ -122,6 +122,44 @@ def test_catalog_uses_structured_pds4_product_id_when_available(tmp_path: Path):
     assert product.identification_method == "pds4_metadata"
 
 
+def test_catalog_classifies_structured_hysi_cube_as_partial(tmp_path: Path):
+    image_path = tmp_path / "ch1_hys_product.qub"
+    image_path.with_suffix(".xml").write_text(
+        """<?xml version="1.0"?>
+        <Product_Observational>
+          <Identification_Area>
+            <logical_identifier>urn:isro:isda:ch1_cho.iir:data_calibrated:ch1_hys_product</logical_identifier>
+          </Identification_Area>
+          <Observation_Area>
+            <Investigation_Area><name>Chandrayaan-1</name><type>Mission</type></Investigation_Area>
+            <Observing_System>
+              <Observing_System_Component type="Instrument">
+                <name>Hyper Spectral Imager</name>
+              </Observing_System_Component>
+            </Observing_System>
+          </Observation_Area>
+          <Mission_Area><instrument_id>HYSI</instrument_id></Mission_Area>
+          <File_Area_Observational>
+            <Array_3D_Spectrum>
+              <Axis_Array><axis_name>BAND</axis_name><elements>64</elements></Axis_Array>
+              <Axis_Array><axis_name>LINE</axis_name><elements>4</elements></Axis_Array>
+              <Axis_Array><axis_name>SAMPLE</axis_name><elements>5</elements></Axis_Array>
+              <Element_Array><data_type>IEEE754LSBSingle</data_type></Element_Array>
+            </Array_3D_Spectrum>
+        </File_Area_Observational></Product_Observational>""",
+        encoding="utf-8",
+    )
+    image_path.write_bytes(bytes(64 * 4 * 5 * 4))
+
+    product = inspect_product(image_path, root_dir=tmp_path)
+
+    assert product.mission == "Chandrayaan-1"
+    assert product.instrument == "HYSI"
+    assert product.band_count == 64
+    assert product.status == "partial"
+    assert product.validation_message.startswith("Spectral cube metadata parsed")
+
+
 def test_chandrayaan_adapter_recovers_identity_from_product_identifier(tmp_path: Path):
     image_path = tmp_path / "unlabelled_identity.img"
     image_path.with_suffix(".xml").write_text(
@@ -184,6 +222,11 @@ def test_pair_selector_uses_footprint_intersection_when_available(tmp_path: Path
 
     assert pair.status == "candidate"
     assert pair.overlap_ratio == 0.25
+    assert pair.intersection_area == 1.0
+    assert pair.source_area == 4.0
+    assert pair.target_area == 4.0
+    assert pair.selection_method == "footprint_intersection"
+    assert pair.pair_id == "source__target"
     assert pair.reason.startswith("Footprint overlap")
 def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
     source = MissionProduct(
