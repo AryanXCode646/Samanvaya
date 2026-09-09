@@ -49,7 +49,9 @@ def test_catalog_inspects_detached_ohrc_product_without_loading_pixels(tmp_path:
     assert product.width == 5
     assert product.height == 4
     assert product.gsd_m == 0.28
+    assert product.gsd_source == "pds4"
     assert product.sun_azimuth_deg == 201.2
+    assert product.sun_geometry_source == "pds4"
     assert product.center_lat_deg == 11.0
     assert product.center_lon_deg == 21.0
     assert product.footprint == [(20.0, 10.0), (22.0, 10.0), (22.0, 12.0), (20.0, 12.0)]

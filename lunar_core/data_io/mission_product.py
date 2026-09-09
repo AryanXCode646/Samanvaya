@@ -35,6 +35,7 @@ class MissionProduct:
     band_count: Optional[int] = None
     dtype: Optional[str] = None
     gsd_m: Optional[float] = None
+    gsd_source: Optional[str] = None
     wavelength_min_um: Optional[float] = None
     wavelength_max_um: Optional[float] = None
     acquisition_time: Optional[str] = None
@@ -47,6 +48,7 @@ class MissionProduct:
     spacecraft_name: Optional[str] = None
     sun_azimuth_deg: Optional[float] = None
     sun_elevation_deg: Optional[float] = None
+    sun_geometry_source: Optional[str] = None
     incidence_angle_deg: Optional[float] = None
     emission_angle_deg: Optional[float] = None
     phase_angle_deg: Optional[float] = None
