@@ -171,6 +171,22 @@ def cmd_info(args: argparse.Namespace) -> None:
     print("  • Interactive Streamlit application (streamlit run app.py)")
 
 
+def cmd_catalog_scan(args: argparse.Namespace) -> None:
+    """Scan mission products without loading their pixel arrays."""
+    from lunar_core.data_io.mission_catalog import scan, write_csv
+
+    products = scan(Path(args.root))
+    output = Path(args.output)
+    write_csv(products, output)
+    invalid = [product for product in products if product.status != "validated"]
+    print(f"Cataloged {len(products)} products to {output}")
+    if invalid:
+        print(f"Invalid products: {len(invalid)}")
+        for product in invalid:
+            print(f"  - {product.image_path}: {product.validation_message}")
+        raise SystemExit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="samanvaya",
@@ -199,6 +215,14 @@ def main() -> None:
     p_align.add_argument("--cap", type=int, default=4, help="ANMS equal cap per 8x8 cell")
     p_align.add_argument("--reproj-threshold", type=float, default=1.5, help="USAC-MAGSAC reprojection threshold")
     p_align.set_defaults(func=cmd_align)
+
+    # samanvaya catalog scan
+    p_catalog = subparsers.add_parser("catalog", help="Discover mission products and metadata")
+    catalog_commands = p_catalog.add_subparsers(dest="catalog_command", required=True)
+    p_catalog_scan = catalog_commands.add_parser("scan", help="Scan a raw mission-data directory")
+    p_catalog_scan.add_argument("root", help="Directory containing downloaded mission products")
+    p_catalog_scan.add_argument("--output", default="data/metadata/products.csv", help="CSV manifest output path")
+    p_catalog_scan.set_defaults(func=cmd_catalog_scan)
 
     # samanvaya info
     p_info = subparsers.add_parser("info", help="Display system and mission configuration")
