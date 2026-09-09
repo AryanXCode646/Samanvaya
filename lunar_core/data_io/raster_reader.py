@@ -276,47 +276,110 @@ class PlanetaryRasterReader:
         # Extract namespace if present
         ns = {"pds": root.tag.split("}")[0].strip("{")} if "}" in root.tag else {}
 
+        def _local_name(tag: str) -> str:
+            return tag.rsplit("}", 1)[-1]
+
+        def _text_from_candidates(*names: str) -> list[str]:
+            values: list[str] = []
+            for tag_name in names:
+                for candidate in root.iter():
+                    if _local_name(candidate.tag).lower() == tag_name.lower() and candidate.text:
+                        values.append(candidate.text.strip())
+            return values
+
+        def _coerce_float(raw: str) -> Optional[float]:
+            try:
+                value = float(raw)
+                return value if np.isfinite(value) else None
+            except (TypeError, ValueError):
+                import re
+                match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", raw)
+                if match is None:
+                    return None
+                try:
+                    value = float(match.group(0))
+                    return value if np.isfinite(value) else None
+                except ValueError:
+                    return None
+
+        def _distance_in_meters(element: Any) -> Optional[float]:
+            if element is None or not element.text:
+                return None
+            value = _coerce_float(element.text)
+            if value is None or value <= 0:
+                return None
+            unit = (element.attrib.get("unit", "m") or "m").strip().lower()
+            factors = {
+                "m": 1.0,
+                "meter": 1.0,
+                "meters": 1.0,
+                "metre": 1.0,
+                "metres": 1.0,
+                "cm": 1e-2,
+                "centimeter": 1e-2,
+                "centimeters": 1e-2,
+                "mm": 1e-3,
+                "millimeter": 1e-3,
+                "millimeters": 1e-3,
+                "um": 1e-6,
+                "micrometer": 1e-6,
+                "micrometers": 1e-6,
+                "km": 1e3,
+                "kilometer": 1e3,
+                "kilometers": 1e3,
+            }
+            factor = factors.get(unit)
+            return value * factor if factor is not None else None
+
+        def get_elem(*tag_names: str):
+            visited: set[str] = set()
+            for tag_name in tag_names:
+                query = tag_name.lower()
+                if query in visited:
+                    continue
+                visited.add(query)
+                if ns:
+                    elem = root.find(f".//pds:{tag_name}", ns)
+                    if elem is not None:
+                        return elem
+                elem = root.find(f".//{tag_name}")
+                if elem is not None:
+                    return elem
+                for candidate in root.iter():
+                    if _local_name(candidate.tag).lower() == query and candidate.text:
+                        return candidate
+            return None
+
         # Default fallback values
         sun_az = 0.0
         sun_el = 45.0
         gsd = 1.0
         modality = SensorModality.SYNTHETIC
 
-        def get_elem(tag_name: str):
-            if ns:
-                elem = root.find(f".//pds:{tag_name}", ns)
-                if elem is not None:
-                    return elem
-            elem = root.find(f".//{tag_name}")
-            if elem is not None:
-                return elem
-            # Mission-specific PDS4 dictionaries use additional namespaces
-            # such as ISDA; match by local name without weakening XML safety.
-            for candidate in root.iter():
-                if candidate.tag.rsplit("}", 1)[-1] == tag_name and candidate.text:
-                    return candidate
-            return None
-
-        # Search for solar geometry in PDS4 observation area
-        az_node = get_elem("solar_azimuth_angle")
-        if az_node is None:
-            az_node = get_elem("sun_azimuth")
-        el_node = get_elem("solar_elevation_angle")
-        if el_node is None:
-            el_node = get_elem("sun_elevation")
-        gsd_node = get_elem("pixel_resolution")
-        sensor_nodes = [
-            candidate
-            for candidate in root.iter()
-            if candidate.tag.rsplit("}", 1)[-1] in {"instrument_id", "name"} and candidate.text
-        ]
+        az_node = get_elem("solar_azimuth_angle", "sun_azimuth", "solar_azimuth", "sun_azimuth_deg")
+        el_node = get_elem("solar_elevation_angle", "sun_elevation", "solar_elevation", "sun_elevation_deg")
+        gsd_node = get_elem("pixel_resolution", "ground_sample_distance", "gsd", "resolution")
 
         if az_node is not None and az_node.text:
-            sun_az = float(az_node.text)
+            parsed = _coerce_float(az_node.text)
+            if parsed is not None:
+                sun_az = parsed
         if el_node is not None and el_node.text:
-            sun_el = float(el_node.text)
+            parsed = _coerce_float(el_node.text)
+            if parsed is not None:
+                sun_el = parsed
         if gsd_node is not None and gsd_node.text:
-            gsd = float(gsd_node.text)
+            parsed = _distance_in_meters(gsd_node)
+            if parsed is not None:
+                gsd = parsed
+
+        if gsd == 1.0:
+            for candidate_text in _text_from_candidates("pixel_resolution", "ground_sample_distance", "gsd"):
+                parsed = _coerce_float(candidate_text)
+                if parsed is not None:
+                    if parsed > 0:
+                        gsd = parsed
+                        break
 
         sensor_text = " ".join(
             node.text for node in root.iter() if node.text and node.text.strip()
@@ -330,5 +393,8 @@ class PlanetaryRasterReader:
         elif "IIRS" in sensor_text:
             modality = SensorModality.IIRS
             gsd = gsd if gsd != 1.0 else 80.0
+        elif "NAC" in sensor_text or "LROC" in sensor_text:
+            modality = SensorModality.LRO_NAC
+            gsd = gsd if gsd != 1.0 else 0.5
 
         return SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el), gsd, modality

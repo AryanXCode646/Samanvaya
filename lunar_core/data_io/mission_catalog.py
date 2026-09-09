@@ -16,12 +16,35 @@ IMAGE_SUFFIXES = {".tif", ".tiff", ".img", ".qub"}
 MANIFEST_FIELDS = list(MissionProduct.__dataclass_fields__.keys())
 
 
+def _tag_name(node: Any) -> str:
+    tag = getattr(node, "tag", "")
+    if not isinstance(tag, str):
+        return str(tag).lower()
+    return tag.rsplit("}", 1)[-1].lower()
+
+
 def _local_values(root: Any, name: str) -> list[str]:
+    target = name.lower()
     return [
         node.text.strip()
         for node in root.iter()
-        if node.text and node.tag.rsplit("}", 1)[-1].lower() == name.lower()
+        if node.text and _tag_name(node) == target
     ]
+
+
+def _text_candidates(root: Any, *names: str) -> list[str]:
+    values: list[str] = []
+    for name in names:
+        values.extend(_local_values(root, name))
+    return values
+
+
+def _first_value(root: Any, *names: str) -> Optional[str]:
+    for name in names:
+        values = _local_values(root, name)
+        if values:
+            return values[0]
+    return None
 
 
 def _label_for(image_path: Path) -> Optional[Path]:
@@ -32,38 +55,116 @@ def _label_for(image_path: Path) -> Optional[Path]:
     return candidates[0] if len(candidates) == 1 else None
 
 
-def _infer_mission_instrument(image_path: Path, label_root: Any) -> tuple[Optional[str], Optional[str]]:
+def _mission_from_text(value: str) -> Optional[str]:
+    upper = value.upper()
+    if any(token in upper for token in ("CHANDRAYAAN-2", "CHANDRAYAAN 2", "CH2", "CHANDRAYAAN2")):
+        return "Chandrayaan-2"
+    if "LRO" in upper or "LUNAR RECONNAISSANCE ORBITER" in upper:
+        return "LRO"
+    if "SELENE" in upper or "KAGUYA" in upper:
+        return "SELENE"
+    return None
+
+
+def _instrument_from_text(value: str) -> Optional[str]:
+    upper = value.upper()
+    if any(token in upper for token in ("OHRC", "HIGH RESOLUTION CAMERA")):
+        return "OHRC"
+    if any(token in upper for token in ("TMC", "TERRAIN MAPPING CAMERA")):
+        return "TMC-2"
+    if any(token in upper for token in ("IIRS", "IMAGING INFRARED SPECTROMETER")):
+        return "IIRS"
+    if any(token in upper for token in ("NAC", "NARROW ANGLE CAMERA")):
+        return "NAC"
+    if "LROC" in upper:
+        return "LROC"
+    if "TC" in upper:
+        return "TC"
+    return None
+
+
+def _first_instrument_from_values(values: list[str], combined: str) -> Optional[str]:
+    for value in values:
+        instrument = _instrument_from_text(value)
+        if instrument is not None:
+            return instrument
+    for token, instrument in {
+        "OHRC": "OHRC",
+        "TMC": "TMC-2",
+        "IIRS": "IIRS",
+        "NAC": "NAC",
+        "LROC": "LROC",
+        "TC": "TC",
+    }.items():
+        if token in combined:
+            return instrument
+    return None
+
+
+def _infer_mission_instrument(image_path: Path, label_root: Any) -> tuple[Optional[str], Optional[str], str]:
+    """Infer mission and instrument using structured metadata before filename heuristics."""
     text = " ".join(
         node.text.strip()
         for node in label_root.iter()
         if node.text and node.text.strip()
-    ).upper()
-    name = image_path.name.upper()
-    combined = f"{name} {text}"
-    if "CHANDRAYAAN-2" in combined or "CHANDRAYAAN 2" in combined or "CH2_" in combined:
-        mission = "Chandrayaan-2"
-    elif "LUNAR RECONNAISSANCE ORBITER" in combined or "LRO" in combined:
-        mission = "LRO"
-    elif "SELENE" in combined or "KAGUYA" in combined:
-        mission = "SELENE"
-    else:
-        mission = None
+    )
+    combined = f"{image_path.name} {text}"
 
-    if "OHRC" in combined or "HIGH RESOLUTION CAMERA" in combined:
-        instrument = "OHRC"
-    elif "TMC" in combined or "TERRAIN MAPPING CAMERA" in combined:
-        instrument = "TMC-2"
-    elif "IIRS" in combined or "IMAGING INFRARED SPECTROMETER" in combined:
-        instrument = "IIRS"
-    elif "NAC" in combined or "NARROW ANGLE CAMERA" in combined:
-        instrument = "NAC"
-    elif "LROC" in combined:
-        instrument = "LROC"
-    elif "TC" in combined:
-        instrument = "TC"
-    else:
-        instrument = None
-    return mission, instrument
+    mission_values = _text_candidates(
+        label_root,
+        "mission_name",
+        "mission_id",
+        "mission",
+        "spacecraft_id",
+        "spacecraft_name",
+        "spacecraft",
+    )
+    instrument_values = _text_candidates(
+        label_root,
+        "instrument_name",
+        "instrument_id",
+        "instrument",
+        "sensor_name",
+        "sensor_id",
+        "camera_name",
+    )
+    product_identifier = _first_value(label_root, "product_id", "product_identifier", "logical_identifier", "product_name")
+
+    for value in mission_values:
+        mission = _mission_from_text(value)
+        if mission is not None:
+            return mission, _first_instrument_from_values(instrument_values, combined), "pds4_metadata"
+
+    for value in instrument_values:
+        instrument = _instrument_from_text(value)
+        if instrument is not None:
+            mission = next((_mission_from_text(v) for v in mission_values), None)
+            if mission is not None:
+                return mission, instrument, "pds4_metadata"
+
+    if product_identifier:
+        mission = _mission_from_text(product_identifier)
+        if mission is None:
+            mission = _mission_from_text(image_path.name)
+        instrument = _instrument_from_text(product_identifier) or _first_instrument_from_values(instrument_values, combined)
+        if mission is not None:
+            return mission, instrument, "product_id"
+
+    product_id = image_path.stem.upper()
+    if "CH2" in product_id or "CHANDRAYAAN" in product_id:
+        return "Chandrayaan-2", _first_instrument_from_values(instrument_values, combined), "product_id"
+    if "LRO" in product_id or "LROC" in product_id or "NAC" in product_id:
+        return "LRO", "NAC" if "NAC" in product_id else _first_instrument_from_values(instrument_values, combined), "product_id"
+    if "SELENE" in product_id or "KAGUYA" in product_id:
+        return "SELENE", _first_instrument_from_values(instrument_values, combined), "product_id"
+
+    for value in combined.upper().split():
+        mission = _mission_from_text(value)
+        if mission is not None:
+            instrument = _first_instrument_from_values(instrument_values, combined)
+            return mission, instrument, "filename_heuristic"
+
+    return None, None, "filename_heuristic"
 
 
 def _read_label(label_path: Path) -> Any:
@@ -132,6 +233,7 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
     )
     if label_path is None and image_path.suffix.lower() in {".img", ".qub"}:
         product.status = "invalid"
+        product.validation_status = "invalid"
         product.validation_message = "Detached product has no same-stem XML label."
         return product
 
@@ -141,7 +243,8 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
         for key, value in header.items():
             setattr(product, key, value)
         if label_root is not None:
-            product.mission, product.instrument = _infer_mission_instrument(image_path, label_root)
+            product.product_id = _first_value(label_root, "product_id", "product_identifier", "logical_identifier", "product_name") or product.product_id
+            product.mission, product.instrument, product.identification_method = _infer_mission_instrument(image_path, label_root)
             sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
                 label_path, allowed_dir=label_path.parent
             )
@@ -154,9 +257,11 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
                 product.instrument = modality.value
             product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
             product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
-            product.product_type = next(iter(_local_values(label_root, "product_class")), None)
+            product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(label_root, "product_type")
+            product.validation_status = product.status
     except Exception as exc:
         product.status = "invalid"
+        product.validation_status = "invalid"
         product.validation_message = f"{type(exc).__name__}: {exc}"
     return product
 

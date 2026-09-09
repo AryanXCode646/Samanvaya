@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from lunar_core.data_io.mission_catalog import inspect_product, scan
+from lunar_core.data_io.mission_adapters import Chandrayaan2Adapter
 from lunar_core.data_io.mission_product import MissionProduct
 from lunar_core.data_io.pair_selector import propose_pair
 
@@ -58,6 +59,85 @@ def test_catalog_retains_missing_label_failure(tmp_path: Path):
     assert len(products) == 1
     assert products[0].status == "invalid"
     assert "XML label" in products[0].validation_message
+
+
+def test_catalog_identifies_mission_explicitly_from_metadata(tmp_path: Path):
+    image_path = tmp_path / "mission_example.img"
+    label_path = image_path.with_suffix(".xml")
+    label_path.write_text(
+        """<?xml version=\"1.0\"?>
+        <Mission_Product>
+          <mission_name>Chandrayaan-2</mission_name>
+          <instrument_id>OHRC</instrument_id>
+          <Array_2D_Image>
+            <offset>0</offset>
+            <Element_Array><data_type>UnsignedByte</data_type></Element_Array>
+            <Axis_Array><elements>4</elements></Axis_Array>
+            <Axis_Array><elements>5</elements></Axis_Array>
+          </Array_2D_Image>
+        </Mission_Product>""",
+        encoding="utf-8",
+    )
+    image_path.write_bytes(bytes(range(20)))
+
+    product = inspect_product(image_path, root_dir=tmp_path)
+
+    assert product.mission == "Chandrayaan-2"
+    assert product.instrument == "OHRC"
+    assert product.status == "validated"
+
+
+def test_catalog_uses_structured_pds4_product_id_when_available(tmp_path: Path):
+    image_path = tmp_path / "random_filename.img"
+    label_path = image_path.with_suffix(".xml")
+    label_path.write_text(
+        """<?xml version=\"1.0\"?>
+        <Product_Observational xmlns:img=\"http://pds.nasa.gov\">
+          <mission_name>Chandrayaan-2</mission_name>
+          <instrument_name>OHRC</instrument_name>
+          <product_id>CH2_OHR_1234</product_id>
+          <Array_2D_Image>
+            <offset>0</offset>
+            <Element_Array><data_type>UnsignedByte</data_type></Element_Array>
+            <Axis_Array><elements>8</elements></Axis_Array>
+            <Axis_Array><elements>6</elements></Axis_Array>
+          </Array_2D_Image>
+        </Product_Observational>""",
+        encoding="utf-8",
+    )
+    image_path.write_bytes(bytes(range(48)))
+
+    product = inspect_product(image_path, root_dir=tmp_path)
+
+    assert product.product_id == "CH2_OHR_1234"
+    assert product.mission == "Chandrayaan-2"
+    assert product.instrument == "OHRC"
+    assert product.identification_method == "pds4_metadata"
+
+
+def test_chandrayaan_adapter_recovers_identity_from_product_identifier(tmp_path: Path):
+    image_path = tmp_path / "unlabelled_identity.img"
+    image_path.with_suffix(".xml").write_text(
+        """<?xml version="1.0"?>
+        <Product_Observational>
+          <product_id>CH2_OHR_5678</product_id>
+          <Array_2D_Image>
+            <Element_Array><data_type>UnsignedByte</data_type></Element_Array>
+            <Axis_Array><elements>4</elements></Axis_Array>
+            <Axis_Array><elements>4</elements></Axis_Array>
+          </Array_2D_Image>
+        </Product_Observational>""",
+        encoding="utf-8",
+    )
+    image_path.write_bytes(bytes(range(16)))
+
+    products = Chandrayaan2Adapter().scan(tmp_path)
+
+    assert len(products) == 1
+    assert products[0].mission == "Chandrayaan-2"
+    assert products[0].instrument == "OHRC"
+    assert products[0].identification_method == "product_id"
+
 
 def test_pair_selector_does_not_invent_overlap_without_coordinates(tmp_path: Path):
     source = MissionProduct("Chandrayaan-2", "OHRC", "source", tmp_path / "source.img", gsd_m=0.28)

@@ -387,11 +387,13 @@ def test_phase4_security_uri_sanitization_and_xxe_protection():
     with tempfile.TemporaryDirectory() as tmp_dir:
         pds4_xml = Path(tmp_dir) / "sample_pds4_label.xml"
         pds4_xml.write_text("""<?xml version="1.0" encoding="UTF-8"?>
-        <Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1">
+        <Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1" xmlns:isda="https://isda.issdc.gov.in/pds4/isda/v1">
             <Observation_Area>
                 <solar_azimuth_angle>72.5</solar_azimuth_angle>
                 <solar_elevation_angle>32.1</solar_elevation_angle>
-                <pixel_resolution>0.25</pixel_resolution>
+                <isda:pixel_resolution>0.25</isda:pixel_resolution>
+                <isda:sun_azimuth>72.5</isda:sun_azimuth>
+                <isda:sun_elevation>32.1</isda:sun_elevation>
                 <instrument_id>CH2_OHRC</instrument_id>
             </Observation_Area>
         </Product_Observational>
@@ -402,3 +404,37 @@ def test_phase4_security_uri_sanitization_and_xxe_protection():
         assert np.isclose(sun.elevation_deg, 32.1)
         assert np.isclose(gsd, 0.25)
         assert modality == SensorModality.OHRC
+
+
+def test_pds4_gsd_units_are_normalized_and_invalid_values_use_defaults(tmp_path: Path):
+    label = tmp_path / "units.xml"
+    label.write_text(
+        """<?xml version="1.0"?>
+        <Product_Observational>
+            <pixel_resolution unit="cm">25</pixel_resolution>
+            <instrument_id>CH2_OHRC</instrument_id>
+        </Product_Observational>""",
+        encoding="utf-8",
+    )
+
+    _sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(label, allowed_dir=tmp_path)
+
+    assert np.isclose(gsd, 0.25)
+    assert modality == SensorModality.OHRC
+
+
+def test_pds4_non_positive_gsd_does_not_override_sensor_default(tmp_path: Path):
+    label = tmp_path / "invalid-gsd.xml"
+    label.write_text(
+        """<?xml version="1.0"?>
+        <Product_Observational>
+            <pixel_resolution unit="m">0</pixel_resolution>
+            <instrument_id>CH2_OHRC</instrument_id>
+        </Product_Observational>""",
+        encoding="utf-8",
+    )
+
+    _sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(label, allowed_dir=tmp_path)
+
+    assert np.isclose(gsd, 0.25)
+    assert modality == SensorModality.OHRC
