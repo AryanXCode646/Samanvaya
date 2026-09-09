@@ -1,12 +1,15 @@
 # 🌙 SAMANVAYA (समान्वय)
-### Autonomous Multi-Modal, Sun-Angle, and Scale-Invariant Lunar Image Correspondence Framework
+### Research-Oriented Multi-Modal, Sun-Angle, and Scale-Invariant Lunar Image Correspondence Framework
 
-[![ISRO SIH PS 26166](https://img.shields.io/badge/ISRO-SIH%20PS%2026166-0284c7?style=for-the-badge&logo=nasa&logoColor=white)](https://github.com/ashishsinghbora/Samanvaya)
+> **Real-data status:** Mission-product ingestion and registration integration are implemented, but independent Chandrayaan-2, LRO, and SELENE validation remains pending. The benchmark values below are synthetic-only unless explicitly labeled otherwise.
+
+[![ISRO SIH PS 26166](https://img.shields.io/badge/ISRO-SIH%20PS%2026166-0284c7?style=for-the-badge&logo=nasa&logoColor=white)](https://github.com/AryanXCode646/Samanvaya)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
 [![Kornia 0.8](https://img.shields.io/badge/Kornia-0.8-10b981?style=for-the-badge)](https://kornia.readthedocs.io)
 [![GDAL / Rasterio](https://img.shields.io/badge/GDAL%20%2F%20Rasterio-1.3%2B-2563eb?style=for-the-badge&logo=qgis&logoColor=white)](https://rasterio.readthedocs.io)
-[![Tests](https://img.shields.io/badge/Tests-run%20pytest%20tests%2F-emerald?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/ashishsinghbora/Samanvaya)
+[![Tests](https://img.shields.io/badge/Tests-run%20pytest%20tests%2F-emerald?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/AryanXCode646/Samanvaya)
+[![CI](https://github.com/AryanXCode646/Samanvaya/actions/workflows/ci.yml/badge.svg)](https://github.com/AryanXCode646/Samanvaya/actions/workflows/ci.yml)
 [![Security Hardened](https://img.shields.io/badge/Security-XXE%20%26%20Decompression%20Shielded-blueviolet?style=for-the-badge)](SECURITY.md)
 [![License MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
@@ -34,7 +37,7 @@ The framework is designed to handle:
 
 > [!NOTE]
 > **Dataset Provenance & Calibration Disclosure:**  
-> The bundled benchmark tiles under `lunar_core/assets/sample_data/` (`scenario_a`, `scenario_b`, `scenario_c`) are high-fidelity calibrated photogrammetric simulations generated via DEM ray-tracing with crater power-law distributions, real lunar landing site coordinates (Apollo 11, Jackson Crater, Shackleton Rim), and Lommel-Seeliger scattering. While Samanvaya includes production drivers for raw ISRO PDS4 XML products and multi-gigabyte GeoTIFFs (`PlanetaryRasterReader`, `PlanetaryTileProcessor`), these compact tiles enable 100% reproducible, offline benchmark verification without multi-gigabyte archive downloads.
+> The bundled benchmark tiles under `lunar_core/assets/sample_data/` (`scenario_a`, `scenario_b`, `scenario_c`) are high-fidelity calibrated photogrammetric simulations generated via DEM ray-tracing with crater power-law distributions, real lunar landing site coordinates (Apollo 11, Jackson Crater, Shackleton Rim), and Lommel-Seeliger scattering. While Samanvaya includes ingestion drivers for raw ISRO PDS4 XML products and multi-gigabyte GeoTIFFs (`PlanetaryRasterReader`, `PlanetaryTileProcessor`), these compact tiles enable 100% reproducible, offline benchmark verification without multi-gigabyte archive downloads.
 
 > **Real-data status:** A Chandrayaan-2/LRO NAC pair has not yet been acquired in this checkout. Real-data RMSE, matcher-path behavior, and mandate status are pending acquisition and execution; no synthetic result should be interpreted as real orbital validation.
 
@@ -75,7 +78,7 @@ flowchart TD
 
     subgraph APP["3. Application Layer (Pipelines & Multi-Scale Solvers)"]
         MIN --> FM["Fourier-Mellin 180° Invariant Coarse Rot/Scale Localizer"]
-          FM --> CAS["HierarchicalMultiModalBridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)"]
+          FM --> CAS["Experimental multimodal bridge (OHRC / TMC-2 / IIRS)"]
         CAS --> TR["Dense LoFTR Linear Transformer Cross-Attention (Primary Matcher)"]
         TR --> ANMS["8x8 Spatial Hash Bucketing ANMS (Entropy H > 0.85)"]
         ANMS --> MAG["USAC-MAGSAC++ Robust Projective Consensus"]
@@ -151,6 +154,13 @@ $$\sigma_x = \sqrt{\frac{2|b|}{4ab - c^2}}, \quad \sigma_y = \sqrt{\frac{2|a|}{4
 To prevent match clustering on high-contrast crater rims while leaving planar mare unconstrained, an $8 \times 8$ spatial hash allocator caps top-confidence correspondences per cell, enforcing uniform spatial Shannon entropy:
 $$H_{\text{spatial}} = -\sum_{k=1}^K p_k \log_2(p_k) \Big/ \log_2(K) \quad \ge 0.85$$
 
+## Scientific References
+
+- Kovesi, P. (1999). *Image Features from Phase Congruency*. Videre, 1(3).
+- Lowe, D. G. (2004). *Distinctive Image Features from Scale-Invariant Keypoints*. IJCV, 60, 91-110.
+- Barath, D., et al. (2020). *MAGSAC++, a Fast, Reliable and Accurate Robust Estimator*. CVPR Workshops.
+- Kornia LoFTR implementation: [kornia.feature.LoFTR](https://kornia.readthedocs.io/en/latest/models.html).
+
 ---
 
 ## ⚡ Quickstart & One-Command Automation
@@ -163,7 +173,7 @@ $$H_{\text{spatial}} = -\sum_{k=1}^K p_k \log_2(p_k) \Big/ \log_2(K) \quad \ge 0
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/ashishsinghbora/Samanvaya.git
+git clone https://github.com/AryanXCode646/Samanvaya.git
 cd Samanvaya
 
 # Setup virtual environment and install dependencies
@@ -191,7 +201,7 @@ Before an offline judging session, run `make prefetch-weights` once while intern
 
 ## 🧪 Comprehensive Verification & Testing
 
-### 1. Run the Full Automated Test Suite (62/62 Passing)
+### 1. Run the Full Automated Test Suite
 ```bash
 make test
 # or: pytest tests/ -v
@@ -209,7 +219,7 @@ Reads bundled calibrated benchmark GeoTIFF tiles, runs 9 out-of-core windowed ti
 make report-pdf
 # or: python3 -m lunar_core.evaluation.pdf_reporter
 ```
-Generates a publication-quality executive PDF complete with the official ISRO SIH compliance certification stamp, telemetry tables, side-by-side verification snapshots, and residual histograms.
+Generates a technical PDF with telemetry tables, side-by-side verification snapshots, and residual histograms. It reports observed reprojection metrics; it is not an official ISRO certification.
 
 ### 4. End-to-End Headless CLI Alignment
 ```bash

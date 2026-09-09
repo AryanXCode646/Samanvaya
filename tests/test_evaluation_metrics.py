@@ -123,6 +123,8 @@ def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     assert report.inlier_ratio_percent == 50.0
     assert report.rmse_pixels < 0.40
     assert report.meets_isro_mandate
+    assert report.ground_truth_available is False
+    assert report.metric_basis == "reprojection_consensus"
     assert report.spatial_uniformity_entropy > 0.0
 
     # 1. Test JSON Export
@@ -135,6 +137,8 @@ def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     assert parsed["summary"]["inlier_ratio_percent"] == 50.0
     assert parsed["summary"]["rmse_pixels"] < 0.40
     assert parsed["summary"]["meets_isro_mandate"] is True
+    assert parsed["metadata"]["ground_truth_available"] is False
+    assert parsed["metadata"]["metric_basis"] == "reprojection_consensus"
     assert len(parsed["tie_points"]) == 5
 
     # 2. Test Scatter Plot Export

@@ -1,4 +1,8 @@
-"""Mission-specific views over the common product catalog."""
+"""Mission-specific metadata views over the common product catalog.
+
+These adapters currently normalize and filter catalog products. They are not
+mission-native calibration or instrument-cube decoders.
+"""
 
 from __future__ import annotations
 
