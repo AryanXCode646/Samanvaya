@@ -247,6 +247,49 @@ class PlanetaryRasterReader:
             crs="IAU2000:30100",
         )
 
+    @staticmethod
+    def open_pds4_memmap(
+        image_path: Union[str, Path],
+        label_xml_path: Union[str, Path],
+        allowed_dir: Optional[Path] = None,
+    ) -> np.memmap:
+        """Open a detached 2-D PDS4 image lazily for windowed processing."""
+        safe_image = sanitize_path(image_path, allowed_dir=allowed_dir)
+        safe_label = sanitize_path(label_xml_path, allowed_dir=allowed_dir)
+        try:
+            root = defused_ET.parse(safe_label, forbid_dtd=True, forbid_entities=True).getroot()
+        except Exception as exc:
+            raise ValueError(f"Invalid or unsafe PDS4 XML label: {safe_label}") from exc
+
+        def values(name: str) -> list[str]:
+            return [
+                node.text.strip()
+                for node in root.iter()
+                if node.text and node.tag.rsplit("}", 1)[-1].lower() == name.lower()
+            ]
+
+        dimensions = [int(value) for value in values("elements")]
+        if len(dimensions) < 2:
+            raise ValueError(f"PDS4 label has no 2-D image dimensions: {safe_label}")
+        height, width = dimensions[-2], dimensions[-1]
+        offsets = values("offset")
+        byte_offset = int(float(offsets[0])) if offsets else 0
+        data_type = (values("data_type") or ["MSB_INTEGER"])[0].upper()
+        bits_values = values("bits")
+        bits = int(bits_values[0]) if bits_values else (8 if "BYTE" in data_type else 32 if "REAL" in data_type else 16)
+        if bits not in (8, 16, 32, 64):
+            raise ValueError(f"Unsupported PDS4 sample width: {bits} bits")
+        if "REAL" in data_type:
+            dtype = np.dtype(">f4" if bits == 32 and "MSB" in data_type else "<f4")
+        else:
+            kind = "u" if "UNSIGNED" in data_type else "i"
+            endian = ">" if "MSB" in data_type else "<"
+            dtype = np.dtype(f"{endian}{kind}{bits // 8}")
+        expected_size = byte_offset + height * width * dtype.itemsize
+        if safe_image.stat().st_size < expected_size:
+            raise ValueError(f"PDS4 image is truncated: expected {expected_size} bytes, found {safe_image.stat().st_size}")
+        return np.memmap(safe_image, dtype=dtype, mode="r", offset=byte_offset, shape=(height, width), order="C")
+
     read_georaster = read_geotiff
 
     @staticmethod

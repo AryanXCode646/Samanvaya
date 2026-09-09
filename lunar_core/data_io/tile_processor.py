@@ -302,10 +302,24 @@ class PlanetaryTileProcessor:
         Safely extracts 2D float32 pixel data for a specific window.
         """
         if isinstance(raster_input, (str, Path)):
-            with rasterio.open(str(raster_input)) as src:
-                data = src.read(1, window=window).astype(np.float32)
-                if src.nodata is not None:
-                    data[data == src.nodata] = np.nan
+            if Path(raster_input).suffix.lower() in {".img", ".qub"}:
+                from lunar_core.data_io.mission_catalog import resolve_product_label
+                from lunar_core.data_io.raster_reader import PlanetaryRasterReader
+
+                label = resolve_product_label(Path(raster_input))
+                if label is None:
+                    raise FileNotFoundError(f"PDS4 XML label not found for {raster_input}")
+                mapped = PlanetaryRasterReader.open_pds4_memmap(raster_input, label)
+                r_start = int(window.row_off)
+                r_end = int(window.row_off + window.height)
+                c_start = int(window.col_off)
+                c_end = int(window.col_off + window.width)
+                data = np.asarray(mapped[r_start:r_end, c_start:c_end], dtype=np.float32)
+            else:
+                with rasterio.open(str(raster_input)) as src:
+                    data = src.read(1, window=window).astype(np.float32)
+                    if src.nodata is not None:
+                        data[data == src.nodata] = np.nan
         elif isinstance(raster_input, rasterio.DatasetReader):
             data = raster_input.read(1, window=window).astype(np.float32)
             if raster_input.nodata is not None:

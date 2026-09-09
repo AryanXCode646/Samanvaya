@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from enum import Enum
 from typing import Any, Optional
+
+
+class ProductStatus(str, Enum):
+    """Lifecycle state for discovered mission products."""
+
+    DISCOVERED = "discovered"
+    PARSED = "parsed"
+    VALIDATED = "validated"
+    PARTIAL = "partial"
+    INVALID = "invalid"
+    UNSUPPORTED = "unsupported"
 
 
 @dataclass
@@ -44,7 +56,7 @@ class MissionProduct:
     product_type: Optional[str] = None
     metadata_source: Optional[str] = None
     identification_method: Optional[str] = None
-    status: str = "discovered"
+    status: ProductStatus | str = ProductStatus.DISCOVERED
     validation_status: Optional[str] = None
     validation_message: Optional[str] = None
 
