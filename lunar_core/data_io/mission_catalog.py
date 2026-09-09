@@ -47,7 +47,8 @@ def _first_value(root: Any, *names: str) -> Optional[str]:
     return None
 
 
-def _label_for(image_path: Path) -> Optional[Path]:
+def resolve_product_label(image_path: Path) -> Optional[Path]:
+    """Resolve one detached label using the canonical product-label policy."""
     exact = image_path.with_suffix(".xml")
     if exact.is_file():
         return exact
@@ -249,7 +250,7 @@ def _footprint_from_coordinates(label_root: Any) -> Optional[list[tuple[float, f
 def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> MissionProduct:
     """Inspect one product without allocating its raster pixels."""
     image_path = sanitize_path(image_path, allowed_dir=root_dir)
-    label_path = _label_for(image_path)
+    label_path = resolve_product_label(image_path)
     product = MissionProduct(
         mission=None,
         instrument=None,
@@ -277,8 +278,9 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
                 label_path, allowed_dir=label_path.parent
             )
             product.gsd_m = gsd
-            product.sun_azimuth_deg = sun.azimuth_deg
-            product.sun_elevation_deg = sun.elevation_deg
+            if sun is not None:
+                product.sun_azimuth_deg = sun.azimuth_deg
+                product.sun_elevation_deg = sun.elevation_deg
             product.center_lat_deg, product.center_lon_deg = _center_coordinates(label_root)
             product.footprint = _footprint_from_coordinates(label_root)
             product.metadata_source = str(label_path)
@@ -287,12 +289,8 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
             product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
             product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
             product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(label_root, "product_type")
-            product.validation_status = product.status
             product.status = "validated"
             product.validation_status = product.status
-            if product.status == "discovered":
-                product.status = "validated"
-                product.validation_status = product.status
     except Exception as exc:
         product.status = "invalid"
         product.validation_status = "invalid"

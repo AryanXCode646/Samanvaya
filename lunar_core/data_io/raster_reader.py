@@ -144,9 +144,12 @@ class PlanetaryRasterReader:
                 sun = sun_angles
             else:
                 tags = src.tags()
-                sun_az = float(tags.get("SUN_AZIMUTH", 0.0))
-                sun_el = float(tags.get("SUN_ELEVATION", 45.0))
-                sun = SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el) if "SUN_AZIMUTH" in tags else None
+                try:
+                    sun_az = float(tags["SUN_AZIMUTH"])
+                    sun_el = float(tags["SUN_ELEVATION"])
+                    sun = SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el)
+                except (KeyError, TypeError, ValueError):
+                    sun = None
 
         return GeoRaster(
             data=data,
@@ -249,7 +252,7 @@ class PlanetaryRasterReader:
     @staticmethod
     def parse_pds4_metadata(
         label_xml_path: Union[str, Path], allowed_dir: Optional[Path] = None
-    ) -> Tuple[SunAngles, float, SensorModality]:
+    ) -> Tuple[Optional[SunAngles], float, SensorModality]:
         """
         Parses PDS4 XML label for Chandrayaan-2/LRO products with hardened XXE protection:
         Ensures entity expansion is strictly disabled (`resolve_entities=False`).
@@ -351,8 +354,8 @@ class PlanetaryRasterReader:
             return None
 
         # Default fallback values
-        sun_az = 0.0
-        sun_el = 45.0
+        sun_az: Optional[float] = None
+        sun_el: Optional[float] = None
         gsd = 1.0
         modality = SensorModality.SYNTHETIC
 
@@ -397,4 +400,5 @@ class PlanetaryRasterReader:
             modality = SensorModality.LRO_NAC
             gsd = gsd if gsd != 1.0 else 0.5
 
-        return SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el), gsd, modality
+        sun = SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el) if sun_az is not None and sun_el is not None else None
+        return sun, gsd, modality

@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from lunar_core.data_io import PlanetaryRasterReader, PlanetaryTileProcessor
-from lunar_core.data_io.mission_catalog import inspect_product
+from lunar_core.data_io.mission_catalog import inspect_product, resolve_product_label
 from lunar_core.evaluation.metrics import EvaluationEngine
 from lunar_core.models import GeoRaster, SensorModality, SunAngles
 from lunar_core.pipeline import LunarCorePipeline
@@ -33,8 +33,8 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1].lower()
 
 
-def read_pds4_image(image_path: Path, label_path: Path) -> np.ndarray:
-    """Read a common detached PDS4 2-D image using its label metadata."""
+def _pds4_layout(image_path: Path, label_path: Path) -> tuple[int, int, int, np.dtype]:
+    """Read the supported detached PDS4 2-D layout without allocating pixels."""
     try:
         from defusedxml import ElementTree
         root = ElementTree.parse(label_path).getroot()
@@ -76,13 +76,24 @@ def read_pds4_image(image_path: Path, label_path: Path) -> np.ndarray:
     else:
         raise ValueError(f"Unsupported PDS4 sample width/type: {bits} bits, {data_type}")
 
-    count = lines * samples
-    with image_path.open("rb") as stream:
-        stream.seek(file_offset)
-        data = np.fromfile(stream, dtype=dtype, count=count)
-    if data.size != count:
-        raise ValueError(f"PDS4 image is truncated: expected {count} samples, found {data.size}")
-    return data.reshape((lines, samples)).astype(np.float32)
+    expected_bytes = file_offset + lines * samples * dtype.itemsize
+    if image_path.stat().st_size < expected_bytes:
+        raise ValueError(
+            f"PDS4 image is truncated: expected at least {expected_bytes} bytes, found {image_path.stat().st_size}"
+        )
+    return lines, samples, file_offset, dtype
+
+
+def open_pds4_memmap(image_path: Path, label_path: Path) -> np.memmap:
+    """Open a detached 2-D PDS4 image lazily for windowed processing."""
+    lines, samples, file_offset, dtype = _pds4_layout(image_path, label_path)
+    return np.memmap(image_path, dtype=dtype, mode="r", offset=file_offset, shape=(lines, samples), order="C")
+
+
+def read_pds4_image(image_path: Path, label_path: Path) -> np.ndarray:
+    """Read a common detached PDS4 2-D image using its label metadata."""
+    data = np.asarray(open_pds4_memmap(image_path, label_path))
+    return data.astype(np.float32)
 
 
 def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
@@ -102,8 +113,7 @@ def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
 
 
 def product_metadata(image_path: Path) -> Tuple[float, Optional[SunAngles]]:
-    labels = sorted(image_path.parent.glob("*.xml"))
-    label = next((path for path in labels if image_path.stem.lower() in path.stem.lower()), labels[0] if labels else None)
+    label = resolve_product_label(image_path)
     if label is None:
         return 1.0, None
     sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(label, allowed_dir=image_path.parent)
@@ -143,8 +153,7 @@ def read_product(image_path: Path, modality: SensorModality) -> Tuple[GeoRaster,
     gsd, sun = product_metadata(image_path)
     try:
         if image_path.suffix.lower() == ".img":
-            labels = sorted(image_path.parent.glob("*.xml"))
-            label = next((path for path in labels if image_path.stem.lower() in path.stem.lower()), None)
+            label = resolve_product_label(image_path)
             if label is None:
                 raise FileNotFoundError(f"No PDS4 XML label found for {image_path.name}")
             data = read_pds4_image(image_path, label)
@@ -210,10 +219,20 @@ def run(args: argparse.Namespace) -> None:
     target_product = inspect_product(target_path, root_dir=target_path.parent)
     source_modality = _modality_for_product(source_product)
     target_modality = _modality_for_product(target_product)
+    if source_modality == SensorModality.IIRS and (source_product.band_count or 0) > 1:
+        raise RuntimeError("IIRS spectral cubes are catalog-aware but not yet supported by the 2-D registration runner.")
+    if target_modality == SensorModality.IIRS and (target_product.band_count or 0) > 1:
+        raise RuntimeError("IIRS spectral cubes are catalog-aware but not yet supported by the 2-D registration runner.")
     source_large_geotiff = source_path.suffix.lower() in {".tif", ".tiff"} and max(
         source_product.height or 0, source_product.width or 0
     ) >= args.tile_threshold
     target_large_geotiff = target_path.suffix.lower() in {".tif", ".tiff"} and max(
+        target_product.height or 0, target_product.width or 0
+    ) >= args.tile_threshold
+    source_large_pds = source_path.suffix.lower() == ".img" and max(
+        source_product.height or 0, source_product.width or 0
+    ) >= args.tile_threshold
+    target_large_pds = target_path.suffix.lower() == ".img" and max(
         target_product.height or 0, target_product.width or 0
     ) >= args.tile_threshold
 
@@ -226,10 +245,16 @@ def run(args: argparse.Namespace) -> None:
     source_shape = (source_product.height or 0, source_product.width or 0)
     target_shape = (target_product.height or 0, target_product.width or 0)
 
-    both_window_readable = source_path.suffix.lower() in {".tif", ".tiff"} and target_path.suffix.lower() in {".tif", ".tiff"}
-    if both_window_readable and (source_large_geotiff or target_large_geotiff):
+    both_window_readable = source_path.suffix.lower() in {".tif", ".tiff", ".img"} and target_path.suffix.lower() in {".tif", ".tiff", ".img"}
+    if both_window_readable and (source_large_geotiff or target_large_geotiff or source_large_pds or target_large_pds):
+        source_input = source_path
+        target_input = target_path
+        if source_path.suffix.lower() == ".img":
+            source_input = open_pds4_memmap(source_path, resolve_product_label(source_path))
+        if target_path.suffix.lower() == ".img":
+            target_input = open_pds4_memmap(target_path, resolve_product_label(target_path))
         tiled = PlanetaryTileProcessor(tile_size=args.tile_size, overlap=args.overlap)
-        tiled_result = tiled.process(source_path, target_path, estimate_coarse_overlap=False)
+        tiled_result = tiled.process(source_input, target_input, estimate_coarse_overlap=False)
         total_matches = tiled_result.metrics.total_matches
         inliers = tiled_result.global_inliers
         matrix = tiled_result.global_homography

@@ -438,3 +438,19 @@ def test_pds4_non_positive_gsd_does_not_override_sensor_default(tmp_path: Path):
 
     assert np.isclose(gsd, 0.25)
     assert modality == SensorModality.OHRC
+
+
+def test_pds4_missing_solar_metadata_is_unknown(tmp_path: Path):
+    label = tmp_path / "missing-sun.xml"
+    label.write_text(
+        """<?xml version="1.0"?>
+        <Product_Observational>
+            <instrument_id>CH2_OHRC</instrument_id>
+        </Product_Observational>""",
+        encoding="utf-8",
+    )
+
+    sun, _gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(label, allowed_dir=tmp_path)
+
+    assert sun is None
+    assert modality == SensorModality.OHRC
