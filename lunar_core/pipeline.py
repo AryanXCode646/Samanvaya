@@ -5,6 +5,7 @@ Unified Clean Architecture Pipeline Facade for Lunar Core.
 from __future__ import annotations
 
 import time
+import logging
 from typing import List, Optional
 import cv2
 import numpy as np
@@ -22,10 +23,13 @@ from lunar_core.preprocessing.contrast import DynamicContrastEqualizer
 from lunar_core.alignment.fourier_mellin import FourierMellinAligner
 from lunar_core.alignment.scale_space import ScaleSpaceLocalizer
 from lunar_core.alignment.dense_matcher import DenseTransformerMatcher
+from lunar_core.alignment.rift_matcher import ClassicalRIFTMatcher
 from lunar_core.postprocessing.anms import SpatialUniformDistributor
 from lunar_core.postprocessing.subpixel import AnalyticalSubpixelRefiner
 from lunar_core.postprocessing.magsac import RobustEstimator
 from lunar_core.evaluation.metrics import EvaluationEngine
+
+logger = logging.getLogger(__name__)
 
 
 class LunarCorePipeline:
@@ -115,6 +119,18 @@ class LunarCorePipeline:
 
         # Step 6: Robust USAC-MAGSAC++ Estimation on Coarse Inliers
         matrix, inliers = self.estimator.estimate(allocated_matches, self.trans_type)
+        matcher_path = "dense_loftr"
+        if len(inliers) < 4:
+            matcher_path = "classical_rift"
+            logger.info("Dense LoFTR produced %d inliers; trying Classical RIFT fallback.", len(inliers))
+            rift_matches = ClassicalRIFTMatcher().match(
+                pc_ref.max_moment,
+                pc_ref.orientation_max_idx,
+                pc_tgt.max_moment,
+                pc_tgt.orientation_max_idx,
+            )
+            matrix, inliers = self.estimator.estimate(rift_matches, self.trans_type)
+            logger.info("Matcher path: %s (%d inliers).", matcher_path, len(inliers))
 
         # Step 7: Sub-Pixel Peak Refinement on Invariant Phase Congruency Surfaces
         if self.enable_subpixel and inliers:
@@ -183,4 +199,5 @@ class LunarCorePipeline:
             inliers=inliers,
             metrics=metrics,
             warped_target=warped,
+            matcher_path=matcher_path,
         )

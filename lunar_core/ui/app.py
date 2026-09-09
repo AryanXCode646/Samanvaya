@@ -27,6 +27,7 @@ import torch
 
 from lunar_core.models import SensorModality, SunAngles, KeypointMatch
 from lunar_core.alignment.dense_matcher import DenseLoFTRMatcher
+from lunar_core.alignment.rift_matcher import ClassicalRIFTMatcher
 from lunar_core.preprocessing.phase_congruency import PhaseCongruencyEngine
 from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.evaluation.metrics import EvaluationEngine, RegistrationEvaluationReport
@@ -370,6 +371,18 @@ if img_source is not None and img_ref is not None:
         inliers, H, warped_source = matcher.filter_outliers_magsac(
             refined_matches, img_source, img_ref.shape
         )
+        matcher_path = "dense_loftr"
+        if len(inliers) < 4:
+            matcher_path = "classical_rift"
+            rift_matches = ClassicalRIFTMatcher().match(
+                pc_ref.max_moment,
+                pc_ref.orientation_max_idx,
+                pc_src.max_moment,
+                pc_src.orientation_max_idx,
+            )
+            inliers, H, warped_source = matcher.filter_outliers_magsac(
+                rift_matches, img_source, img_ref.shape
+            )
         elapsed_ms = (time.perf_counter() - start_t) * 1000.0
 
         # Step 6: Evaluation Diagnostics
@@ -390,6 +403,7 @@ if img_source is not None and img_ref is not None:
         st.session_state["inliers"] = inliers
         st.session_state["raw_matches"] = raw_matches
         st.session_state["homography"] = H
+        st.session_state["matcher_path"] = matcher_path
         st.session_state["warped_source"] = warped_source
         st.session_state["img_source"] = img_source
         st.session_state["img_ref"] = img_ref
@@ -402,11 +416,13 @@ if "result_report" in st.session_state:
     report: RegistrationEvaluationReport = st.session_state["result_report"]
     inliers = st.session_state["inliers"]
     H = st.session_state["homography"]
+    matcher_path = st.session_state.get("matcher_path", "dense_loftr")
     warped_src = st.session_state["warped_source"]
     img_source = st.session_state["img_source"]
     img_ref = st.session_state["img_ref"]
 
     st.markdown("---")
+    st.caption(f"Matcher path: {matcher_path}")
     st.subheader("📊 Planetary Hackathon KPI Metric Scorecards")
 
     # 5 KPI Metric Scorecards
