@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from lunar_core.data_io.mission_product import MissionProduct
+from lunar_core.data_io.mission_product import MissionProduct, ProductStatus
 from lunar_core.data_io.raster_reader import PlanetaryRasterReader, sanitize_path
 from lunar_core.models import SensorModality
 
@@ -258,11 +258,11 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
         image_path=image_path,
         label_path=label_path,
         file_format=image_path.suffix.lower().lstrip("."),
-        status="discovered",
+        status=ProductStatus.DISCOVERED,
     )
     if label_path is None and image_path.suffix.lower() in {".img", ".qub"}:
-        product.status = "invalid"
-        product.validation_status = "invalid"
+        product.status = ProductStatus.INVALID
+        product.validation_status = ProductStatus.INVALID.value
         product.validation_message = "Detached product has no same-stem XML label."
         return product
 
@@ -289,11 +289,11 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
             product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
             product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
             product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(label_root, "product_type")
-            product.status = "validated"
-            product.validation_status = product.status
+            product.status = ProductStatus.VALIDATED
+            product.validation_status = ProductStatus.VALIDATED.value
     except Exception as exc:
-        product.status = "invalid"
-        product.validation_status = "invalid"
+        product.status = ProductStatus.INVALID
+        product.validation_status = ProductStatus.INVALID.value
         product.validation_message = f"{type(exc).__name__}: {exc}"
     return product
 
