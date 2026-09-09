@@ -1,4 +1,4 @@
-"""Register a downloaded Chandrayaan-2/LRO NAC raster pair."""
+"""Register a downloaded mission-product raster pair."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from lunar_core.data_io import PlanetaryRasterReader, PlanetaryTileProcessor
+from lunar_core.data_io.mission_catalog import inspect_product
 from lunar_core.evaluation.metrics import EvaluationEngine
 from lunar_core.models import GeoRaster, SensorModality, SunAngles
 from lunar_core.pipeline import LunarCorePipeline
@@ -94,8 +95,6 @@ def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
         path for path in raw_dir.iterdir()
         if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
     )
-    tokens = ("ohrc", "tmc", "ch2") if role == "Chandrayaan-2" else ("lro", "nac")
-    candidates = [path for path in candidates if any(token in path.name.lower() for token in tokens)]
     if len(candidates) != 1:
         names = ", ".join(path.name for path in candidates) or "none"
         raise RuntimeError(f"Expected exactly one {role} image in {raw_dir}; found: {names}. Use an explicit path.")
@@ -177,20 +176,37 @@ def read_product(image_path: Path, modality: SensorModality) -> Tuple[GeoRaster,
     ), masked_count
 
 
+def _modality_for_product(product) -> SensorModality:
+    instrument = (product.instrument or "").upper()
+    mapping = {
+        "OHRC": SensorModality.OHRC,
+        "TMC-2": SensorModality.TMC2,
+        "IIRS": SensorModality.IIRS,
+        "NAC": SensorModality.LRO_NAC,
+        "LROC": SensorModality.LRO_NAC,
+        "TC": SensorModality.SYNTHETIC,
+    }
+    return mapping.get(instrument, SensorModality.SYNTHETIC)
+
+
 def run(args: argparse.Namespace) -> None:
     started_at = datetime.now(timezone.utc).isoformat()
     started = time.perf_counter()
     raw_dir = Path(args.raw_dir).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    ch2_path = find_product(raw_dir, args.chandrayaan, "Chandrayaan-2")
-    lro_path = find_product(raw_dir, args.lro, "LRO NAC")
-    ch2, ch2_masked = read_product(ch2_path, SensorModality.OHRC)
-    lro, lro_masked = read_product(lro_path, SensorModality.LRO_NAC)
+    source_path = find_product(raw_dir, args.source, "source")
+    target_path = find_product(raw_dir, args.target, "target")
+    source_product = inspect_product(source_path, root_dir=source_path.parent)
+    target_product = inspect_product(target_path, root_dir=target_path.parent)
+    source_modality = _modality_for_product(source_product)
+    target_modality = _modality_for_product(target_product)
+    source, source_masked = read_product(source_path, source_modality)
+    target, target_masked = read_product(target_path, target_modality)
 
-    if max(ch2.shape + lro.shape) >= args.tile_threshold:
+    if max(source.shape + target.shape) >= args.tile_threshold:
         tiled = PlanetaryTileProcessor(tile_size=args.tile_size, overlap=args.overlap)
-        tiled_result = tiled.process(ch2.data, lro.data, estimate_coarse_overlap=False)
+        tiled_result = tiled.process(source.data, target.data, estimate_coarse_overlap=False)
         total_matches = tiled_result.metrics.total_matches
         inliers = tiled_result.global_inliers
         matrix = tiled_result.global_homography
@@ -198,42 +214,42 @@ def run(args: argparse.Namespace) -> None:
         processing_time_ms = tiled_result.processing_time_s * 1000.0
     else:
         result = LunarCorePipeline().register(
-            ref_image=lro.data, target_image=ch2.data,
-            ref_sun=lro.sun_angles, target_sun=ch2.sun_angles,
-            ref_gsd=lro.gsd_meters, target_gsd=ch2.gsd_meters,
+            ref_image=target.data, target_image=source.data,
+            ref_sun=target.sun_angles, target_sun=source.sun_angles,
+            ref_gsd=target.gsd_meters, target_gsd=source.gsd_meters,
         )
         total_matches, inliers, matrix = len(result.matches), result.inliers, result.transform_matrix
         matcher_path, processing_time_ms = result.matcher_path, result.metrics.processing_time_ms
 
     report = EvaluationEngine.generate_report(
         total_matches=total_matches, inliers=inliers, homography=matrix,
-        image_shape=lro.shape, processing_time_ms=processing_time_ms,
+        image_shape=target.shape, processing_time_ms=processing_time_ms,
     )
     report.export_json(output_dir / "evaluation_report.json")
     report.export_csv(output_dir / "evaluation_report.csv")
     provenance = {
         "dataset_class": "real_mission_data",
         "source": {
-            "mission": "Chandrayaan-2",
-            "instrument": ch2.modality.value,
-            "product_id": ch2_path.stem,
-            "file": str(ch2_path),
-            "label": str(ch2_path.with_suffix(".xml")),
-            "gsd_m": ch2.gsd_meters,
-            "sun_azimuth_deg": ch2.sun_angles.azimuth_deg if ch2.sun_angles else None,
-            "sun_elevation_deg": ch2.sun_angles.elevation_deg if ch2.sun_angles else None,
-            "masked_pixels": ch2_masked,
+            "mission": source_product.mission,
+            "instrument": source_product.instrument or source.modality.value,
+            "product_id": source_product.product_id or source_path.stem,
+            "file": str(source_path),
+            "label": str(source_product.label_path) if source_product.label_path else None,
+            "gsd_m": source.gsd_meters,
+            "sun_azimuth_deg": source.sun_angles.azimuth_deg if source.sun_angles else None,
+            "sun_elevation_deg": source.sun_angles.elevation_deg if source.sun_angles else None,
+            "masked_pixels": source_masked,
         },
         "target": {
-            "mission": "LRO",
-            "instrument": lro.modality.value,
-            "product_id": lro_path.stem,
-            "file": str(lro_path),
-            "label": str(lro_path.with_suffix(".xml")),
-            "gsd_m": lro.gsd_meters,
-            "sun_azimuth_deg": lro.sun_angles.azimuth_deg if lro.sun_angles else None,
-            "sun_elevation_deg": lro.sun_angles.elevation_deg if lro.sun_angles else None,
-            "masked_pixels": lro_masked,
+            "mission": target_product.mission,
+            "instrument": target_product.instrument or target.modality.value,
+            "product_id": target_product.product_id or target_path.stem,
+            "file": str(target_path),
+            "label": str(target_product.label_path) if target_product.label_path else None,
+            "gsd_m": target.gsd_meters,
+            "sun_azimuth_deg": target.sun_angles.azimuth_deg if target.sun_angles else None,
+            "sun_elevation_deg": target.sun_angles.elevation_deg if target.sun_angles else None,
+            "masked_pixels": target_masked,
         },
         "pipeline": {
             "matcher": matcher_path,
@@ -255,9 +271,9 @@ def run(args: argparse.Namespace) -> None:
     }
     (output_dir / "provenance.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
     print(f"Site: {args.site}")
-    print(f"Chandrayaan-2: {ch2_path.name} ({ch2.shape}, {ch2.gsd_meters:g} m/px)")
-    print(f"LRO NAC: {lro_path.name} ({lro.shape}, {lro.gsd_meters:g} m/px)")
-    print(f"Masked nodata pixels: Chandrayaan-2={ch2_masked}, LRO NAC={lro_masked}")
+    print(f"Source: {source_path.name} ({source.shape}, {source.gsd_meters:g} m/px)")
+    print(f"Target: {target_path.name} ({target.shape}, {target.gsd_meters:g} m/px)")
+    print(f"Masked nodata pixels: source={source_masked}, target={target_masked}")
     print(f"Matcher path: {matcher_path}")
     print(f"RMSE: {report.rmse_pixels:.4f} px; inliers: {report.inlier_count}")
     print(f"Reports: {output_dir / 'evaluation_report.json'}, {output_dir / 'evaluation_report.csv'}")
@@ -265,11 +281,11 @@ def run(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Register a real Chandrayaan-2/LRO NAC pair.")
+    parser = argparse.ArgumentParser(description="Register a mission-product source/target pair.")
     parser.add_argument("--raw-dir", default="data/real/raw")
     parser.add_argument("--output-dir", default="data/real/results")
-    parser.add_argument("--chandrayaan")
-    parser.add_argument("--lro")
+    parser.add_argument("--source", "--chandrayaan", dest="source")
+    parser.add_argument("--target", "--lro", dest="target")
     parser.add_argument("--site", default="unspecified")
     parser.add_argument("--tile-threshold", type=int, default=4096)
     parser.add_argument("--tile-size", type=int, default=1024)

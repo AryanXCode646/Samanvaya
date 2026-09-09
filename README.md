@@ -19,12 +19,12 @@
 
 ## 📖 Overview
 
-**Samanvaya (समान्वय)** is an enterprise-grade photogrammetric registration and tie-point correspondence engine engineered specifically for ISRO's **Chandrayaan-2** orbital payloads (**OHRC, TMC-2, IIRS**) and reference planetary datasets (**NASA LRO NAC, JAXA SELENE TC**).
+**Samanvaya (समान्वय)** is a research-oriented lunar image correspondence and registration framework for ISRO's **Chandrayaan-2** orbital payloads (**OHRC, TMC-2, IIRS**) and reference planetary datasets (**NASA LRO NAC, JAXA SELENE TC**).
 
-Operating in harsh lunar conditions, Samanvaya autonomously resolves:
+The framework is designed to handle:
 1. **$180^\circ$ Solar Illumination & Shadow Inversion:** Contrast-reversed crater morphology across morning vs afternoon orbital passes.
 2. **Up to $320\times$ Ground Sampling Distance (GSD) Disparity:** Robust multi-scale correspondence bridging OHRC ($0.25\text{ m/px}$), TMC-2 ($5.0\text{ m/px}$), and IIRS hyperspectral infrared ($80.0\text{ m/px}$).
-3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement, evaluated separately on synthetic and real orbital data.
+3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement, currently benchmarked on synthetic data; real orbital evaluation remains pending data acquisition.
 4. **Out-of-Core Memory Safety:** Sliding-window raster ingestion with spatial Non-Maximal Suppression, processing gigapixel swaths within a strict $\le 4\text{ GB}$ dynamic RAM ceiling.
 5. **Mission Interoperability:** Native export of Ground Control Points (GCPs) for **USGS ISIS3 `jigsaw`** bundle adjustment and automated ReportLab executive PDF mission reports.
 
@@ -97,7 +97,7 @@ flowchart TD
 Samanvaya/
 ├── app.py                         # Interactive Streamlit Web Application (port 8501)
 ├── run_pipeline.py                # End-to-End Registration Pipeline with Minnaert
-├── verify_raster_run.py           # Real Raster Out-of-Core Verification
+├── verify_raster_run.py           # Large-Raster Out-of-Core Verification
 ├── lunar_core/                    # High-Performance Algorithmic Engines
 │   ├── alignment/                 # Dense LoFTR Matcher, Fourier-Mellin, Scale Space
 │   ├── assets/sample_data/        # Benchmark GeoTIFFs (Apollo 11, Jackson Crater, Low Sun)
@@ -115,7 +115,7 @@ Samanvaya/
 ├── Dockerfile                     # Multi-Stage Production Container
 ├── docker-compose.yml             # Single-Service Streamlit Container Orchestration
 ├── requirements.txt               # Pinned Production Dependencies
-└── tests/                         # 62 Extensive Automated Verification Tests
+└── tests/                         # Automated Verification Tests
 ```
 
 ---
@@ -184,7 +184,7 @@ Before an offline judging session, run `make prefetch-weights` once while intern
 - **Streamlit Analytical Workbench:** [http://localhost:8501](http://localhost:8501)
 - **Headless Pipeline Execution:** `make pipeline` or `python3 run_pipeline.py --scenario scenario_a`
 - **Quantitative Benchmark Metrics:** `make metrics` or `python3 -m lunar_core.evaluation.metrics`
-- **Real Raster Verification:** `make verify-raster` or `python3 verify_raster_run.py --scenario scenario_a`
+- **Large-Raster Verification:** `make verify-raster` or `python3 verify_raster_run.py --scenario scenario_a` (bundled calibrated benchmark data, not spacecraft data)
 - **Executive PDF Mission Report:** `make report-pdf` or `python3 -m lunar_core.evaluation.pdf_reporter`
 
 ---
@@ -197,12 +197,12 @@ make test
 # or: pytest tests/ -v
 ```
 
-### 2. Execute Real Raster Out-of-Core Verification
+### 2. Execute Large-Raster Out-of-Core Verification
 ```bash
 make verify-raster
 # or: python3 verify_raster_run.py --scenario scenario_a
 ```
-Reads calibrated lunar GeoTIFF tiles, runs 9 out-of-core windowed tiles, performs cKDTree boundary seam deduplication, and generates `evaluation_report.json` and `evaluation_report.csv`.
+Reads bundled calibrated benchmark GeoTIFF tiles, runs 9 out-of-core windowed tiles, performs cKDTree boundary seam deduplication, and generates `evaluation_report.json` and `evaluation_report.csv`. This verifies raster processing behavior; it is not real spacecraft-data validation.
 
 ### 3. Generate Executive ReportLab PDF Mission Report
 ```bash
