@@ -3,6 +3,8 @@
 
 > **Real-data status:** Mission-product ingestion and registration integration are implemented, but independent Chandrayaan-2, LRO, and SELENE validation remains pending. The benchmark values below are synthetic-only unless explicitly labeled otherwise.
 
+> **IIRS scope:** IIRS products are catalog-aware, but multi-band spectral-cube preprocessing and spectral-to-2-D correspondence are not yet implemented in the registration runner.
+
 [![ISRO SIH PS 26166](https://img.shields.io/badge/ISRO-SIH%20PS%2026166-0284c7?style=for-the-badge&logo=nasa&logoColor=white)](https://github.com/AryanXCode646/Samanvaya)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
@@ -26,7 +28,7 @@
 
 The framework is designed to handle:
 1. **$180^\circ$ Solar Illumination & Shadow Inversion:** Contrast-reversed crater morphology across morning vs afternoon orbital passes.
-2. **Up to $320\times$ Ground Sampling Distance (GSD) Disparity:** Robust multi-scale correspondence bridging OHRC ($0.25\text{ m/px}$), TMC-2 ($5.0\text{ m/px}$), and IIRS hyperspectral infrared ($80.0\text{ m/px}$).
+2. **Up to $320\times$ Ground Sampling Distance (GSD) Disparity:** The architecture is designed for multi-scale correspondence across OHRC ($0.25\text{ m/px}$), TMC-2 ($5.0\text{ m/px}$), and cataloged IIRS products ($80.0\text{ m/px}$); IIRS cube registration remains future work.
 3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement, currently benchmarked on synthetic data; real orbital evaluation remains pending data acquisition.
 4. **Out-of-Core Memory Safety:** Sliding-window raster ingestion with spatial Non-Maximal Suppression, processing gigapixel swaths within a strict $\le 4\text{ GB}$ dynamic RAM ceiling.
 5. **Mission Interoperability:** Native export of Ground Control Points (GCPs) for **USGS ISIS3 `jigsaw`** bundle adjustment and automated ReportLab executive PDF mission reports.

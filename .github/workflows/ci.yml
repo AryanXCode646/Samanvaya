@@ -21,7 +21,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.0,<3.0"
           python -m pip install -r requirements.txt
-          python -m pip install -e .
+          python -m pip install -e ".[test]"
       - name: Import smoke test
         run: python -c "from lunar_core.data_io.mission_catalog import inspect_product; from lunar_core.data_io.pair_selector import propose_pair; print('imports ok')"
       - name: Run tests
