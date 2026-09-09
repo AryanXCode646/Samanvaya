@@ -35,7 +35,7 @@ pipeline:
 
 metrics:
 	@echo "📊 Computing evaluation metrics (RMSE, Inlier Ratio, Uniformity)..."
-	$(PYTHON) metrics.py
+	$(PYTHON) -m lunar_core.evaluation.metrics
 
 evaluate: metrics
 
@@ -45,7 +45,7 @@ verify-raster:
 
 report-pdf:
 	@echo "📄 Generating ISRO Mission Registration PDF Report..."
-	$(PYTHON) pdf_reporter.py
+	$(PYTHON) -m lunar_core.evaluation.pdf_reporter
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache __pycache__ */__pycache__ */*/__pycache__

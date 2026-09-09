@@ -156,8 +156,8 @@ def test_export_structured_json_and_scatter_plot(tmp_path: Path):
 
 
 def test_standalone_metrics_module(tmp_path: Path):
-    """Verifies standalone root metrics.py evaluation functions and reports."""
-    from metrics import (
+    """Verifies the canonical evaluation metrics functions and reports."""
+    from lunar_core.evaluation.metrics import (
         compute_control_points_rmse,
         compute_inlier_stats,
         compute_spatial_uniformity_score,

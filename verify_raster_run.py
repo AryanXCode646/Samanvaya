@@ -9,7 +9,7 @@ Demonstrates:
 3. Out-of-core windowed tile processing via PlanetaryTileProcessor avoiding RAM overflows.
 4. Spatial boundary seam deduplication using cKDTree Non-Maximal Suppression.
 5. Global USAC-MAGSAC++ consensus with sub-pixel Taylor-series peak refinement.
-6. Automated invocation of metrics.py generating structured JSON and CSV reports with ISRO badge.
+6. Automated invocation of the evaluation metrics module generating structured JSON and CSV reports.
 """
 
 from __future__ import annotations

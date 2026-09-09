@@ -166,7 +166,7 @@ def cmd_info(args: argparse.Namespace) -> None:
     print("  • 3-Step Hyperspectral Cascade Bridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)")
     print("  • USGS ISIS3 Jigsaw GCP Exporter with Curvature Covariance")
     print("  • Classical RIFT Phase-Congruency Matcher & LoFTR Dense Matcher")
-    print("  • Interactive Streamlit Live Web Portal (streamlit run app.py)")
+    print("  • Interactive Streamlit application (streamlit run app.py)")
 
 
 def main() -> None:

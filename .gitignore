@@ -97,6 +97,11 @@ yarn-error.log*
 data/audit/
 data/pipeline/
 data/workspace/
+data/real/
+evaluation_report.*
+scenario_*_report.*
+*.pdf
+baseline_test_results.txt
 
 # --- C++ Build Artifacts ---
 csrc/build/

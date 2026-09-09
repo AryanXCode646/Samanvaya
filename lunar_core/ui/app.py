@@ -491,6 +491,30 @@ if "result_report" in st.session_state:
     # TAB 3: Residual Error Scatter & Frequency Invariance
     with tab_diagnostics:
         st.subheader("📈 Residual Error Scatter Field & Frequency Invariance")
+        st.markdown("#### Inlier Vector Flow Field")
+        st.caption("Displacement vectors show the direction and magnitude of each inlier match.")
+        if inliers:
+            ref_x = np.array([match.ref_xy[0] for match in inliers])
+            ref_y = np.array([match.ref_xy[1] for match in inliers])
+            delta_x = np.array([match.target_xy[0] - match.ref_xy[0] for match in inliers])
+            delta_y = np.array([match.target_xy[1] - match.ref_xy[1] for match in inliers])
+            magnitudes = np.hypot(delta_x, delta_y)
+
+            flow_fig, flow_ax = plt.subplots(figsize=(10, 7))
+            flow_ax.imshow(img_ref, cmap="gray")
+            flow = flow_ax.quiver(
+                ref_x, ref_y, delta_x, delta_y, magnitudes,
+                cmap="autumn", angles="xy", scale_units="xy", scale=1.0,
+                width=0.005,
+            )
+            flow_ax.scatter(ref_x, ref_y, c="lime", s=25, edgecolors="black", linewidths=0.5)
+            flow_ax.set_title(f"Inlier Vector Flow Field ({len(inliers)} matches)")
+            flow_ax.axis("off")
+            flow_fig.colorbar(flow, ax=flow_ax, shrink=0.7, label="Displacement Magnitude (pixels)")
+            st.pyplot(flow_fig)
+        else:
+            st.warning("No inliers detected for vector flow field.")
+
         col_d1, col_d2 = st.columns(2)
 
         with col_d1:

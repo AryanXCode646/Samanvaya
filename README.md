@@ -28,7 +28,7 @@ Operating in harsh lunar conditions, Samanvaya autonomously resolves:
 4. **Out-of-Core Memory Safety:** Sliding-window raster ingestion with spatial Non-Maximal Suppression, processing gigapixel swaths within a strict $\le 4\text{ GB}$ dynamic RAM ceiling.
 5. **Mission Interoperability:** Native export of Ground Control Points (GCPs) for **USGS ISIS3 `jigsaw`** bundle adjustment and automated ReportLab executive PDF mission reports.
 
-[**🌐 Live Web Portal**](https://ashishsinghbora.github.io/Samanvaya/) • [**📚 Showcase Wiki & Architecture**](https://ashishsinghbora.github.io/Samanvaya/wiki.html) • [**📊 Benchmark Scorecards**](https://ashishsinghbora.github.io/Samanvaya/benchmarks.html) • [**🎤 5-Minute Pitch Deck**](PITCH_DECK.md) • [**📄 Executive Mission PDF**](samanvaya_mission_report.pdf)
+[**🎤 5-Minute Pitch Deck**](PITCH_DECK.md)
 
 ---
 
@@ -107,10 +107,6 @@ Samanvaya/
 │   ├── postprocessing/            # 2D Taylor Sub-pixel Refiner, ANMS, USAC-MAGSAC++
 │   ├── preprocessing/             # Minnaert Normalizer, Contrast Equalizer, Log-Gabor PC
 │   └── ui/                        # Streamlit UI Components & Inspectors
-├── docs/                          # Static Documentation & Showcase Wiki (GitHub Pages)
-├── evaluation_report.json         # Structured Evaluation Telemetry (JSON)
-├── evaluation_report.csv          # Structured Tie-Point Residual Error Table (CSV)
-├── samanvaya_mission_report.pdf   # Generated Publication-Grade Mission Report
 ├── Makefile                       # Single-Command Automation
 ├── start.sh                       # One-Command Streamlit Launcher
 ├── start.ps1                      # Windows PowerShell Launcher
@@ -183,9 +179,9 @@ pip install -e .
 ```
 - **Streamlit Analytical Workbench:** [http://localhost:8501](http://localhost:8501)
 - **Headless Pipeline Execution:** `make pipeline` or `python3 run_pipeline.py --scenario scenario_a`
-- **Quantitative Benchmark Metrics:** `make metrics` or `python3 metrics.py`
+- **Quantitative Benchmark Metrics:** `make metrics` or `python3 -m lunar_core.evaluation.metrics`
 - **Real Raster Verification:** `make verify-raster` or `python3 verify_raster_run.py --scenario scenario_a`
-- **Executive PDF Mission Report:** `make report-pdf` or `python3 pdf_reporter.py`
+- **Executive PDF Mission Report:** `make report-pdf` or `python3 -m lunar_core.evaluation.pdf_reporter`
 
 ---
 
