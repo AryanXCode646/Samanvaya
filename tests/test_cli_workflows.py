@@ -1,8 +1,9 @@
 import csv
 import json
 from pathlib import Path
+import pytest
 
-from lunar_core.cli import cmd_catalog_show, cmd_evaluate, cmd_pair_discover
+from lunar_core.cli import cmd_catalog_show, cmd_evaluate, cmd_pair_discover, cmd_register
 
 
 def _manifest(path: Path) -> None:
@@ -69,3 +70,35 @@ def test_evaluate_prints_existing_report(tmp_path, capsys):
     report.write_text('{"dataset_class": "synthetic"}', encoding="utf-8")
     cmd_evaluate(type("Args", (), {"report": str(report)})())
     assert "synthetic" in capsys.readouterr().out
+
+
+def test_register_forwards_generic_source_and_target(monkeypatch):
+    captured = {}
+
+    def fake_run(command):
+        captured["command"] = command
+        return type("Result", (), {"returncode": 0})()
+
+    import lunar_core.cli as cli_module
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit) as exit_info:
+        cmd_register(
+            type(
+                "Args",
+                (),
+                {
+                    "source": "source.img",
+                    "target": "target.img",
+                    "raw_dir": "raw",
+                    "output_dir": "results",
+                    "site": "test-site",
+                },
+            )()
+        )
+
+    assert exit_info.value.code == 0
+    assert "--source" in captured["command"]
+    assert "--target" in captured["command"]
+    assert "--chandrayaan" not in captured["command"]
+    assert "--lro" not in captured["command"]

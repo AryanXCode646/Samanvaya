@@ -10,6 +10,10 @@ from lunar_core.data_io.mission_product import MissionProduct
 from lunar_core.data_io.pair_selector import propose_pair
 
 
+def test_mission_product_starts_as_discovered():
+  assert MissionProduct().status == "discovered"
+
+
 def test_catalog_inspects_detached_ohrc_product_without_loading_pixels(tmp_path: Path):
     image_path = tmp_path / "ch2_ohr_nrp_example.img"
     label_path = image_path.with_suffix(".xml")
@@ -48,6 +52,7 @@ def test_catalog_inspects_detached_ohrc_product_without_loading_pixels(tmp_path:
     assert product.sun_azimuth_deg == 201.2
     assert product.center_lat_deg == 11.0
     assert product.center_lon_deg == 21.0
+    assert product.footprint == [(20.0, 10.0), (22.0, 10.0), (22.0, 12.0), (20.0, 12.0)]
 
 
 def test_catalog_retains_missing_label_failure(tmp_path: Path):
@@ -162,4 +167,33 @@ def test_pair_selector_marks_nearby_products_as_candidates(tmp_path: Path):
     pair = propose_pair(source, target)
 
     assert pair.status == "candidate"
-    assert pair.reason.startswith("Center distance")
+    assert pair.reason.startswith("Center proximity")
+def test_pair_selector_uses_footprint_intersection_when_available(tmp_path: Path):
+    source = MissionProduct(
+      "Chandrayaan-2", "OHRC", "source", tmp_path / "source.img",
+      footprint=[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)],
+    )
+    target = MissionProduct(
+      "LRO", "NAC", "target", tmp_path / "target.img",
+      footprint=[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
+    )
+
+    pair = propose_pair(source, target)
+
+    assert pair.status == "candidate"
+    assert pair.overlap_ratio == 0.25
+    assert pair.reason.startswith("Footprint overlap")
+def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
+    source = MissionProduct(
+      "Chandrayaan-2", "OHRC", "source", tmp_path / "source.img",
+      footprint=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+    )
+    target = MissionProduct(
+      "LRO", "NAC", "target", tmp_path / "target.img",
+      footprint=[(2.0, 2.0), (3.0, 2.0), (3.0, 3.0), (2.0, 3.0)],
+    )
+
+    pair = propose_pair(source, target)
+
+    assert pair.status == "rejected"
+    assert pair.overlap_ratio == 0.0

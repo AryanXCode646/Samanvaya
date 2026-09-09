@@ -218,6 +218,34 @@ def _center_coordinates(label_root: Any) -> tuple[Optional[float], Optional[floa
     )
 
 
+def _footprint_from_coordinates(label_root: Any) -> Optional[list[tuple[float, float]]]:
+    """Build a conservative lat/lon bounding polygon from structured corner fields."""
+    latitudes: list[float] = []
+    longitudes: list[float] = []
+    for node in label_root.iter():
+        if not node.text:
+            continue
+        name = _tag_name(node)
+        try:
+            value = float(node.text.strip())
+        except ValueError:
+            continue
+        if "latitude" in name:
+            latitudes.append(value)
+        elif "longitude" in name:
+            longitudes.append(value)
+    if len(latitudes) < 2 or len(longitudes) < 2:
+        return None
+    min_lat, max_lat = min(latitudes), max(latitudes)
+    min_lon, max_lon = min(longitudes), max(longitudes)
+    return [
+        (min_lon, min_lat),
+        (max_lon, min_lat),
+        (max_lon, max_lat),
+        (min_lon, max_lat),
+    ]
+
+
 def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> MissionProduct:
     """Inspect one product without allocating its raster pixels."""
     image_path = sanitize_path(image_path, allowed_dir=root_dir)
@@ -229,7 +257,7 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
         image_path=image_path,
         label_path=label_path,
         file_format=image_path.suffix.lower().lstrip("."),
-        status="validated",
+        status="discovered",
     )
     if label_path is None and image_path.suffix.lower() in {".img", ".qub"}:
         product.status = "invalid"
@@ -252,6 +280,7 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
             product.sun_azimuth_deg = sun.azimuth_deg
             product.sun_elevation_deg = sun.elevation_deg
             product.center_lat_deg, product.center_lon_deg = _center_coordinates(label_root)
+            product.footprint = _footprint_from_coordinates(label_root)
             product.metadata_source = str(label_path)
             if product.instrument is None and modality != SensorModality.SYNTHETIC:
                 product.instrument = modality.value
@@ -259,6 +288,11 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
             product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
             product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(label_root, "product_type")
             product.validation_status = product.status
+            product.status = "validated"
+            product.validation_status = product.status
+            if product.status == "discovered":
+                product.status = "validated"
+                product.validation_status = product.status
     except Exception as exc:
         product.status = "invalid"
         product.validation_status = "invalid"

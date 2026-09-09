@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "samanvaya"
-version = "1.0.0"
-description = "Samanvaya: Multi-Modal, Sun Angle & Scale Invariant Lunar Registration Engine (Chandrayaan-2 OHRC, TMC-2, IIRS)"
+version = "0.3.0"
+description = "Research-oriented lunar image correspondence and registration framework for Chandrayaan-2 and reference planetary imagery"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [

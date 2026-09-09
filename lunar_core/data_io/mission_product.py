@@ -44,7 +44,7 @@ class MissionProduct:
     product_type: Optional[str] = None
     metadata_source: Optional[str] = None
     identification_method: Optional[str] = None
-    status: str = "validated"
+    status: str = "discovered"
     validation_status: Optional[str] = None
     validation_message: Optional[str] = None
 

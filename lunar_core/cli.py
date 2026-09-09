@@ -240,7 +240,7 @@ def cmd_pair_discover(args: argparse.Namespace) -> None:
 
 
 def cmd_register(args: argparse.Namespace) -> None:
-    """Delegate real-pair registration to the existing provenance-producing runner."""
+    """Register a generic source/target mission-product pair."""
     runner = _PROJECT_ROOT / "scripts" / "register_real_pair.py"
     command = [
         sys.executable,
@@ -249,9 +249,9 @@ def cmd_register(args: argparse.Namespace) -> None:
         args.raw_dir,
         "--output-dir",
         args.output_dir,
-        "--chandrayaan",
+        "--source",
         args.source,
-        "--lro",
+        "--target",
         args.target,
         "--site",
         args.site,
@@ -318,9 +318,9 @@ def main() -> None:
     p_pair_discover.set_defaults(func=cmd_pair_discover)
 
     # samanvaya register
-    p_register = subparsers.add_parser("register", help="Register a supplied Chandrayaan-2/LRO pair")
-    p_register.add_argument("--source", required=True, help="Chandrayaan-2 product filename or path")
-    p_register.add_argument("--target", required=True, help="LRO NAC product filename or path")
+    p_register = subparsers.add_parser("register", help="Register a supplied mission-product pair")
+    p_register.add_argument("--source", required=True, help="Source mission product filename or path")
+    p_register.add_argument("--target", required=True, help="Target mission product filename or path")
     p_register.add_argument("--raw-dir", default="data/real/raw")
     p_register.add_argument("--output-dir", default="data/real/results")
     p_register.add_argument("--site", default="unspecified")
