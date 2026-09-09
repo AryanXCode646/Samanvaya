@@ -278,9 +278,15 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
                 label_path, allowed_dir=label_path.parent
             )
             product.gsd_m = gsd
+            product.gsd_source = "pds4" if _first_value(
+                label_root, "pixel_resolution", "ground_sample_distance", "gsd", "resolution"
+            ) else ("instrument_default" if modality != SensorModality.SYNTHETIC else "unknown")
             if sun is not None:
                 product.sun_azimuth_deg = sun.azimuth_deg
                 product.sun_elevation_deg = sun.elevation_deg
+                product.sun_geometry_source = "pds4"
+            else:
+                product.sun_geometry_source = "unknown"
             product.center_lat_deg, product.center_lon_deg = _center_coordinates(label_root)
             product.footprint = _footprint_from_coordinates(label_root)
             product.metadata_source = str(label_path)
