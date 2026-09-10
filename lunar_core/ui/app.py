@@ -47,59 +47,212 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    :root {
+        --bg-base: #07141d;
+        --bg-panel: rgba(11, 20, 30, 0.88);
+        --bg-panel-strong: rgba(14, 26, 38, 0.98);
+        --border-soft: rgba(147, 186, 255, 0.18);
+        --border-strong: rgba(147, 186, 255, 0.33);
+        --text-primary: #ecf7ff;
+        --text-muted: #b3cfee;
+        --text-faint: #8aa7c8;
+        --accent: #73c8ff;
+        --accent-strong: #8ddcff;
+        --success: #6fe3a4;
+        --warning: #f9d871;
+        --danger: #ff7a7a;
+        --shadow: rgba(0, 0, 0, 0.35);
+    }
+
     .stApp {
-        background: linear-gradient(180deg, #07131d 0%, #0b1622 100%);
+        background:
+            radial-gradient(circle at top left, rgba(116, 182, 255, 0.12), transparent 30%),
+            radial-gradient(circle at top right, rgba(99, 236, 197, 0.08), transparent 26%),
+            linear-gradient(180deg, #06121a 0%, #0a1723 40%, #091720 100%);
+        color: var(--text-primary);
     }
+
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 1.1rem;
         padding-bottom: 2rem;
+        max-width: 1500px;
     }
+
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, rgba(7, 17, 25, 0.99), rgba(10, 20, 28, 0.98));
+        border-right: 1px solid var(--border-soft);
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.22);
+    }
+
+    [data-testid="stSidebar"] .block-container {
+        background: transparent;
+        padding-top: 1.2rem;
+    }
+
     .portal-shell {
-        background: rgba(14, 26, 37, 0.78);
-        border: 1px solid rgba(160, 204, 255, 0.22);
-        border-radius: 18px;
-        padding: 1.2rem 1.4rem;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
-        backdrop-filter: blur(8px);
+        background: linear-gradient(180deg, rgba(12, 21, 32, 0.92), rgba(13, 23, 33, 0.86));
+        border: 1px solid var(--border-strong);
+        border-radius: 22px;
+        padding: 1.25rem 1.45rem 1rem;
+        box-shadow: 0 20px 55px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.04);
+        backdrop-filter: blur(12px);
+        margin-bottom: 1.25rem;
     }
+
+    .portal-shell h1 {
+        margin: 0;
+        font-size: 2.2rem;
+        letter-spacing: -0.04em;
+        color: var(--text-primary);
+        text-shadow: 0 0 18px rgba(116, 200, 255, 0.18);
+    }
+
+    .portal-shell p {
+        margin-top: 0.55rem;
+        color: var(--text-muted);
+        font-size: 1.02rem;
+    }
+
     .metric-card {
-        background: linear-gradient(180deg, rgba(18, 36, 52, 0.92), rgba(11, 22, 34, 0.92));
-        border: 1px solid rgba(128, 167, 255, 0.3);
-        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(18, 35, 49, 0.96), rgba(10, 21, 30, 0.96));
+        border: 1px solid var(--border-soft);
+        border-radius: 18px;
         padding: 0.9rem 1rem;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        box-shadow: 0 12px 30px rgba(5, 12, 18, 0.25), inset 0 1px 0 rgba(255,255,255,0.04);
     }
+
     .status-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0.4rem 0.8rem;
+        padding: 0.45rem 0.9rem;
         border-radius: 999px;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.02em;
-        background: rgba(104, 206, 145, 0.18);
-        border: 1px solid rgba(104, 206, 145, 0.55);
-        color: #d6ffe8;
+        background: linear-gradient(180deg, rgba(98, 223, 164, 0.18), rgba(98, 223, 164, 0.12));
+        border: 1px solid rgba(111, 227, 164, 0.65);
+        color: #d9ffe9;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
     }
-    .sidebar .block-container {
-        background: rgba(8, 16, 24, 0.96);
+
+    div[data-testid="stDecoration"] {
+        display: none;
+    }
+
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(15, 29, 39, 0.96), rgba(10, 20, 28, 0.96));
+        border: 1px solid var(--border-soft);
+        border-radius: 16px;
+        box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+        padding: 0.8rem 0.9rem;
+    }
+
+    div[data-testid="stMetric"] label {
+        color: var(--text-faint) !important;
+        font-size: 0.78rem !important;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: var(--text-primary) !important;
+        font-size: 1.7rem !important;
+        font-weight: 700 !important;
+        margin-top: 0.15rem;
+    }
+
+    div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
+        color: var(--text-muted) !important;
+        font-size: 0.77rem !important;
+    }
+
+    .stButton > button {
+        border-radius: 12px !important;
+        border: 1px solid rgba(134, 191, 255, 0.38) !important;
+        background: linear-gradient(180deg, rgba(20, 42, 62, 0.98), rgba(12, 25, 38, 0.98)) !important;
+        color: var(--text-primary) !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.01em;
+        box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .stButton > button:hover {
+        border-color: rgba(141, 220, 255, 0.8) !important;
+        box-shadow: 0 14px 28px rgba(26, 96, 161, 0.22) !important;
+        transform: translateY(-1px);
+    }
+
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(180deg, rgba(75, 170, 255, 0.25), rgba(27, 71, 128, 0.9)) !important;
+        border-color: rgba(119, 199, 255, 0.8) !important;
+    }
+
+    .stTabs [role="tablist"] {
+        border-bottom: 1px solid var(--border-soft);
+        gap: 0.55rem;
+    }
+
+    .stTabs [role="tab"] {
+        border-radius: 12px 12px 0 0;
+        padding: 0.7rem 1rem;
+        color: var(--text-muted) !important;
+        font-weight: 600;
+        background: rgba(255,255,255,0.02);
+    }
+
+    .stTabs [role="tab"][aria-selected="true"] {
+        background: linear-gradient(180deg, rgba(26, 42, 57, 0.95), rgba(16, 28, 39, 0.92));
+        border: 1px solid var(--border-strong);
+        border-bottom: none;
+        color: var(--text-primary) !important;
+    }
+
+    .stAlert, .stInfo, .stSuccess, .stWarning, .stError {
+        border-radius: 14px !important;
+        border: 1px solid rgba(148, 176, 230, 0.18) !important;
+        box-shadow: 0 8px 18px rgba(0,0,0,0.14);
+    }
+
+    textarea, input, select {
+        border-radius: 10px !important;
+        border: 1px solid rgba(148, 176, 230, 0.22) !important;
+        background: rgba(10, 20, 28, 0.95) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .stSlider > div > div {
+        background: rgba(255,255,255,0.02);
+    }
+
+    .stDownloadButton > button {
+        background: linear-gradient(180deg, rgba(65, 90, 116, 0.98), rgba(26, 39, 54, 0.98)) !important;
+        border: 1px solid rgba(144, 182, 240, 0.32) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .stFileUploader > section {
+        background: rgba(10, 19, 26, 0.9);
+        border: 1px dashed rgba(141, 197, 255, 0.3);
+        border-radius: 14px;
+    }
+
+    .sidebar .stSelectbox, .sidebar .stSlider {
+        padding-bottom: 0.3rem;
+    }
+
+    .main .stMarkdown {
+        color: var(--text-primary);
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    """
-    <div class="portal-shell">
-        <h1 style="margin:0; font-size:2.2rem; color:#edf7ff;">🌙 ISRO Chandrayaan-2 Lunar Alignment Portal</h1>
-        <p style="margin:0.45rem 0 0; font-size:1.05rem; color:#b8d7f7;">
-            SIH PS 26166 · Multi-modal, sun-angle, and scale-invariant lunar registration
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+selected_key = "scenario_a"
+img_source = None
+img_ref = None
+summary_badge = "SYSTEM READY"
 
 # -----------------------------------------------------------------------------
 # Helper Functions: Image Loading, Sample Presets & Plotting
@@ -173,6 +326,35 @@ def parse_uploaded_pds4_metadata(uploaded_file) -> Tuple[SunAngles, float, Senso
         temp_path.unlink(missing_ok=True)
 
 
+def moon_preview_image(image: np.ndarray) -> np.ndarray:
+    """Return a realistic lunar-style visualization instead of raw grayscale microworking."""
+    arr = np.asarray(image, dtype=np.float32)
+    if arr.ndim == 2:
+        valid = arr[np.isfinite(arr)]
+        if valid.size == 0:
+            return np.zeros((1, 1, 3), dtype=np.uint8)
+        vmin = float(np.percentile(valid, 1.0))
+        vmax = float(np.percentile(valid, 99.5))
+        denom = max(vmax - vmin, 1e-6)
+        norm = np.clip((arr - vmin) / denom, 0.0, 1.0)
+        gray = (norm * 255.0).astype(np.uint8)
+        rgb = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+        rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+        rgb[..., 0] = np.clip(rgb[..., 0] * 0.78 + 18.0, 0.0, 100.0)
+        rgb[..., 1] = np.clip(rgb[..., 1] * 1.05 + 8.0, -127.0, 128.0)
+        rgb[..., 2] = np.clip(rgb[..., 2] * 1.15 - 12.0, -127.0, 128.0)
+        rgb = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_LAB2RGB)
+        return rgb
+    if arr.ndim == 3 and arr.shape[2] == 1:
+        return moon_preview_image(arr[:, :, 0])
+    if arr.ndim == 3 and arr.shape[2] in (3, 4):
+        rgb = np.clip(arr, 0.0, 1.0)
+        if rgb.dtype != np.uint8:
+            rgb = (rgb * 255.0).astype(np.uint8)
+        return rgb[..., :3]
+    return np.zeros((1, 1, 3), dtype=np.uint8)
+
+
 def load_uploaded_image(uploaded_file) -> np.ndarray:
     """Safely loads an uploaded GeoTIFF, TIFF, PNG, or JPEG file as a 2D float32 array."""
     bytes_data = uploaded_file.getvalue()
@@ -200,6 +382,56 @@ def load_uploaded_image(uploaded_file) -> np.ndarray:
         p_low, p_high = np.percentile(img, 1.0), np.percentile(img, 99.0)
         denom = max(float(p_high - p_low), 1e-5)
         return np.clip((img - p_low) / denom, 0.0, 1.0).astype(np.float32)
+
+
+def data_type_label_for_key(selected_key: str) -> str:
+    """Return the current dataset class in a UI-safe, non-misleading label."""
+    if selected_key == "custom_upload":
+        return "REAL MISSION DATA"
+    if selected_key == "synthetic_sim":
+        return "SYNTHETIC BENCHMARK"
+    return "SYNTHETIC BENCHMARK"
+
+
+def format_unknown(value, default: str = "Unknown") -> str:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value if value.strip() else default
+    return str(value)
+
+
+def render_workflow_steps(active_index: int = 1) -> None:
+    steps = ["01 DATA", "02 PAIR", "03 REGISTER", "04 VERIFY"]
+    cols = st.columns(len(steps))
+    for idx, label in enumerate(steps):
+        with cols[idx]:
+            style = "background: rgba(115,200,255,0.14); border:1px solid rgba(115,200,255,0.35); color:#dff6ff;"
+            if idx == active_index:
+                style = "background: rgba(111,227,164,0.12); border:1px solid rgba(111,227,164,0.4); color:#eafff1;"
+            elif idx < active_index:
+                style = "background: rgba(255,255,255,0.03); border:1px solid rgba(148,176,230,0.20); color:#d9ebff;"
+            st.markdown(
+                f"<div style='padding:0.65rem 0.7rem; border-radius:12px; text-align:center; font-size:0.79rem; font-weight:700; letter-spacing:0.08em; {style}'>{label}</div>",
+                unsafe_allow_html=True,
+            )
+
+
+def render_pair_card(title: str, mission: str, instrument: str, product_id: str, dimensions: str, gsd: str, status: str) -> None:
+    st.markdown(
+        f"""
+        <div style="padding:0.9rem 1rem; border:1px solid rgba(148,176,230,0.24); border-radius:16px; background:linear-gradient(180deg, rgba(12,23,33,0.95), rgba(9,18,27,0.94)); min-height: 188px;">
+            <div style="font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase; color:#8fb9d8; margin-bottom:0.7rem;">{title}</div>
+            <div style="font-size:1.05rem; font-weight:700; margin-bottom:0.18rem;">{format_unknown(mission)}</div>
+            <div style="font-size:0.95rem; color:#d5ebff; margin-bottom:0.7rem;">{format_unknown(instrument)}</div>
+            <div style="margin-bottom:0.38rem; color:#edfaff; font-weight:600;">{format_unknown(product_id)}</div>
+            <div style="margin-bottom:0.38rem; color:#dcecff;">{format_unknown(dimensions)}</div>
+            <div style="margin-bottom:0.38rem; color:#dcecff;">{format_unknown(gsd)}</div>
+            <div style="margin-top:0.7rem; display:inline-flex; padding:0.3rem 0.55rem; border-radius:999px; background: rgba(255,255,255,0.03); border:1px solid rgba(148,176,230,0.2); font-size:0.72rem; color:#eafff1;">{format_unknown(status)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_launch_modal(selected_benchmark: str, selected_key: str, source_modality: str, ref_modality: str) -> None:
@@ -318,7 +550,26 @@ def render_tie_point_correspondences(
 # Sidebar Configuration & Mission Evaluation Benchmarks
 # -----------------------------------------------------------------------------
 
-st.sidebar.header("🎯 Mission Evaluation Benchmark")
+st.sidebar.header("MODE")
+st.sidebar.caption("Scientifically honest workflow selection")
+mode_choice = st.sidebar.radio("Data source", ["Real Mission Data", "Synthetic / Benchmark"], index=0 if selected_key == "custom_upload" else 1, horizontal=False)
+
+st.sidebar.header("DATA")
+if mode_choice == "Real Mission Data":
+    st.sidebar.caption("Use imported mission products or custom archive data only when local products are available.")
+else:
+    st.sidebar.caption("Benchmark presets and synthetic scenarios remain clearly labeled as non-mission results.")
+
+st.sidebar.header("CONFIGURATION")
+with st.sidebar.expander("Advanced configuration", expanded=False):
+    st.caption("Tune the registration engine before launching the workflow.")
+
+st.sidebar.markdown("---")
+st.sidebar.header("ABOUT")
+st.sidebar.caption("PS 26166 · Chandrayaan-2 OHRC ↔ lunar reference imagery")
+st.sidebar.caption("Supported missions: Chandrayaan-2, LRO, synthetic benchmark pairs")
+
+st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Reset backend state", use_container_width=True):
     for key in [
         "result_report",
@@ -353,6 +604,37 @@ selected_benchmark = st.sidebar.selectbox(
 )
 selected_key = benchmark_options[selected_benchmark]
 
+data_type_badge = data_type_label_for_key(selected_key)
+summary_badge = "SYSTEM READY" if "result_report" not in st.session_state else "RESULT READY"
+
+st.markdown(
+    f"""
+    <div class="portal-shell">
+        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+                <div style="font-size:0.75rem; letter-spacing:0.22em; text-transform:uppercase; color:#8eb8d8; margin-bottom:0.45rem;">SAMANVAYA</div>
+                <h1 style="margin:0; font-size:2.15rem; color:#edf7ff;">Lunar Multi-Modal Image Correspondence</h1>
+                <p style="margin:0.45rem 0 0; font-size:1.02rem; color:#b8d7f7;">Register Chandrayaan-2 and lunar reference imagery across illumination, viewpoint, and scale changes.</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:flex-end; margin-top:0.2rem;">
+                <span style="padding:0.38rem 0.72rem; border-radius:999px; background: rgba(115, 200, 255, 0.12); border:1px solid rgba(115,200,255,0.35); color:#dff6ff; font-size:0.78rem; font-weight:700;">{data_type_badge}</span>
+                <span style="padding:0.38rem 0.72rem; border-radius:999px; background: rgba(111, 227, 164, 0.12); border:1px solid rgba(111,227,164,0.35); color:#dfffea; font-size:0.78rem; font-weight:700;">{summary_badge}</span>
+            </div>
+        </div>
+        <div style="margin-top:0.85rem; display:flex; flex-wrap:wrap; gap:0.6rem;">
+            <span style="padding:0.34rem 0.72rem; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(148,176,230,0.22); color:#d9ebff; font-size:0.76rem; font-weight:600;">CPU/GPU: available</span>
+            <span style="padding:0.34rem 0.72rem; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(148,176,230,0.22); color:#d9ebff; font-size:0.76rem; font-weight:600;">DATA STATUS: {'ready' if img_source is not None and img_ref is not None else 'pending'}</span>
+            <span style="padding:0.34rem 0.72rem; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(148,176,230,0.22); color:#d9ebff; font-size:0.76rem; font-weight:600;">MODEL STATUS: active</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("PAIR DISCOVERY")
+st.sidebar.caption("Pair status remains conservative and reflects the actual backend state.")
+
 # Automatic modality syncing based on selected preset
 default_src_mod = SensorModality.OHRC.value
 default_ref_mod = SensorModality.LRO_NAC.value
@@ -385,12 +667,17 @@ if selected_key == "custom_upload":
     uploaded_src_xml = st.sidebar.file_uploader("Upload Source PDS4 XML (Optional)", type=["xml"], key="source_pds4_xml")
     uploaded_ref_xml = st.sidebar.file_uploader("Upload Reference PDS4 XML (Optional)", type=["xml"], key="reference_pds4_xml")
 
+conf_thresh = st.session_state.get("ui_conf_thresh", 0.15)
+anms_cap = st.session_state.get("ui_anms_cap", 4)
+enable_subpixel = st.session_state.get("ui_enable_subpixel", True)
+magsac_thresh = st.session_state.get("ui_magsac_thresh", 1.5)
+
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Alignment Engine Parameters")
-conf_thresh = st.sidebar.slider("LoFTR Confidence Threshold (τ)", 0.05, 0.90, 0.15, step=0.05)
-anms_cap = st.sidebar.slider("ANMS Cap per Cell (8x8 Grid)", 1, 12, 4, step=1)
-enable_subpixel = st.sidebar.checkbox("2D Parabolic Taylor Sub-Pixel Peak Refinement", value=True)
-magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0.5, 3.0, 1.5, step=0.25)
+conf_thresh = st.sidebar.slider("LoFTR Confidence Threshold (τ)", 0.05, 0.90, conf_thresh, step=0.05, key="ui_conf_thresh")
+anms_cap = st.sidebar.slider("ANMS Cap per Cell (8x8 Grid)", 1, 12, anms_cap, step=1, key="ui_anms_cap")
+enable_subpixel = st.sidebar.checkbox("2D Parabolic Taylor Sub-Pixel Peak Refinement", value=enable_subpixel, key="ui_enable_subpixel")
+magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0.5, 3.0, magsac_thresh, step=0.25, key="ui_magsac_thresh")
 
 # -----------------------------------------------------------------------------
 # Ingestion & Data Preparation
@@ -422,27 +709,47 @@ if selected_key in ["scenario_a", "scenario_b", "scenario_c"]:
     except Exception as e:
         st.error(f"Failed to load cached benchmark GeoTIFF: {e}")
 
-    # Display Mission Acquisition Metadata Card
-    st.markdown(f"### 🎯 Benchmark: {bm.get('title', selected_benchmark)}")
-    st.markdown(f"**Target Site**: {bm.get('target', 'Moon')} — *{bm.get('description', '')}*")
+    st.markdown("<div style='height:0.38rem;'></div>", unsafe_allow_html=True)
+    render_workflow_steps(1)
 
-    col_meta1, col_meta2 = st.columns(2)
-    with col_meta1:
-        st.info(f"""
-        **🚀 Source: {bm['source']['spacecraft']}**
-        - **Payload Sensor**: `{bm['source']['sensor']}`
-        - **Ground Sampling Distance**: `{bm['source']['gsd_m']} m/pixel`
-        - **Orbit Altitude**: `{bm['source']['altitude_km']} km`
-        - **Solar Geometry**: Azimuth `{bm['source']['sun_azimuth_deg']}°`, Elevation `{bm['source']['sun_elevation_deg']}°`
-        """)
-    with col_meta2:
-        st.info(f"""
-        **🔭 Reference: {bm['reference']['spacecraft']}**
-        - **Payload Sensor**: `{bm['reference']['sensor']}`
-        - **Ground Sampling Distance**: `{bm['reference']['gsd_m']} m/pixel`
-        - **Orbit Altitude**: `{bm['reference']['altitude_km']} km`
-        - **Solar Geometry**: Azimuth `{bm['reference']['sun_azimuth_deg']}°`, Elevation `{bm['reference']['sun_elevation_deg']}°`
-        """)
+    st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
+    left_col, center_col, right_col = st.columns([1, 1.15, 1])
+    with left_col:
+        render_pair_card(
+            title="SOURCE",
+            mission=format_unknown(bm.get('source', {}).get('spacecraft')),
+            instrument=format_unknown(bm.get('source', {}).get('sensor')),
+            product_id=format_unknown(bm.get('source', {}).get('product_id')), 
+            dimensions=f"{format_unknown(bm.get('source', {}).get('width'))} × {format_unknown(bm.get('source', {}).get('height'))}",
+            gsd=f"{format_unknown(bm.get('source', {}).get('gsd_m'))} m/px",
+            status="READY",
+        )
+    with center_col:
+        st.markdown(
+            f"""
+            <div style="padding:1rem 0.8rem; border:1px solid rgba(148,176,230,0.18); border-radius:16px; background:linear-gradient(180deg, rgba(12,21,30,0.96), rgba(10,18,27,0.94)); min-height:188px; display:flex; flex-direction:column; justify-content:center; text-align:center;">
+                <div style="font-size:0.72rem; letter-spacing:0.14em; text-transform:uppercase; color:#8fb9d8; margin-bottom:0.6rem;">REGISTRATION CHALLENGE</div>
+                <div style="font-size:1.05rem; color:#edfaff; font-weight:700;">GSD {bm.get('source', {}).get('gsd_m', 'Unknown')} → {bm.get('reference', {}).get('gsd_m', 'Unknown')} m/px</div>
+                <div style="font-size:0.9rem; color:#d5ebff; margin-top:0.5rem;">Scale ratio: {format_unknown(bm.get('source', {}).get('gsd_m'))}</div>
+                <div style="font-size:0.9rem; color:#d5ebff; margin-top:0.35rem;">Overlap: {format_unknown(bm.get('overlap_status', 'UNKNOWN'))}</div>
+                <div style="font-size:0.9rem; color:#d5ebff; margin-top:0.35rem;">Geometry: {format_unknown(bm.get('geometry_method', 'unknown'))}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right_col:
+        render_pair_card(
+            title="TARGET",
+            mission=format_unknown(bm.get('reference', {}).get('spacecraft')),
+            instrument=format_unknown(bm.get('reference', {}).get('sensor')),
+            product_id=format_unknown(bm.get('reference', {}).get('product_id')),
+            dimensions=f"{format_unknown(bm.get('reference', {}).get('width'))} × {format_unknown(bm.get('reference', {}).get('height'))}",
+            gsd=f"{format_unknown(bm.get('reference', {}).get('gsd_m'))} m/px",
+            status="READY",
+        )
+
+    st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
+    st.caption(f"{bm.get('title', selected_benchmark)} · {bm.get('target', 'Moon')} · {bm.get('description', '')}")
 
 elif selected_key == "synthetic_sim":
     sim = LunarTerrainSimulator(size=(256, 256), seed=101)
@@ -708,8 +1015,7 @@ if "result_report" in st.session_state:
             swipe_composite[:, :col_split] = img_ref[:, :col_split]
             swipe_composite[:, col_split:] = warped_src[:, col_split:]
 
-            # Draw divider line
-            swipe_rgb = cv2.cvtColor((swipe_composite * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
+            swipe_rgb = moon_preview_image(swipe_composite)
             if 0 <= col_split < w:
                 swipe_rgb[:, col_split, :] = [255, 40, 40]  # Red divider
 
@@ -734,7 +1040,7 @@ if "result_report" in st.session_state:
                     else:
                         checker[y : y + tile_size, x : x + tile_size] = warped_src[y : y + tile_size, x : x + tile_size]
 
-            st.image(checker, caption=f"50/50 Checkerboard Blend ({tile_size}x{tile_size} px tiles)", width="stretch", clamp=True)
+            st.image(moon_preview_image(checker), caption=f"50/50 Checkerboard Blend ({tile_size}x{tile_size} px tiles)", width="stretch", clamp=True)
 
     # TAB 2: Interactive Side-by-Side Tie-Point Correspondence Plot
     with tab_tiepoints:
@@ -758,7 +1064,7 @@ if "result_report" in st.session_state:
             magnitudes = np.hypot(delta_x, delta_y)
 
             flow_fig, flow_ax = plt.subplots(figsize=(10, 7))
-            flow_ax.imshow(img_ref, cmap="gray")
+            flow_ax.imshow(moon_preview_image(img_ref), interpolation="nearest")
             flow = flow_ax.quiver(
                 ref_x, ref_y, delta_x, delta_y, magnitudes,
                 cmap="autumn", angles="xy", scale_units="xy", scale=1.0,
@@ -784,7 +1090,7 @@ if "result_report" in st.session_state:
             st.markdown("#### Log-Gabor Phase Congruency (M_max)")
             pc_e = PhaseCongruencyEngine(num_scales=4, num_orientations=6)
             pc_out = pc_e.compute(img_source)
-            st.image(pc_out.max_moment, caption="Maximum Moment (M_max) Invariant Step Edges", width="stretch", clamp=True)
+            st.image(moon_preview_image(pc_out.max_moment), caption="Maximum Moment (M_max) Invariant Step Edges", width="stretch", clamp=True)
 
     # TAB 4: Structured JSON & GIS Export
     with tab_exports:

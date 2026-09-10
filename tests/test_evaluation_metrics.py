@@ -114,6 +114,35 @@ def test_reprojection_only_results_do_not_count_as_ground_truth_validation():
     assert report.metric_basis == "reprojection_consensus"
 
 
+def test_synthetic_reprojection_results_are_marked_non_scientific():
+    """Synthetic reprojection scores must be labeled as non-scientific unless independent GT is present."""
+    src_pts = np.array([
+        [10.0, 10.0],
+        [50.0, 10.0],
+        [10.0, 50.0],
+        [50.0, 50.0],
+    ], dtype=np.float64)
+    ref_pts = src_pts + np.array([[0.10, -0.05], [-0.05, 0.20], [0.20, 0.10], [-0.15, -0.15]])
+    H = np.eye(3)
+
+    inliers = [
+        KeypointMatch(ref_xy=(float(ref_pts[i, 0]), float(ref_pts[i, 1])), target_xy=(float(src_pts[i, 0]), float(src_pts[i, 1])), confidence=0.9)
+        for i in range(len(src_pts))
+    ]
+
+    report = EvaluationEngine.generate_report(
+        total_matches=10,
+        inliers=inliers,
+        image_shape=(100, 100),
+        homography=H,
+    )
+
+    assert report.ground_truth_available is False
+    assert report.scientific_status == "reprojection_consensus_only"
+    assert report.to_dict()["validation_status"] == "reprojection_consensus_only"
+    assert report.meets_isro_mandate is False
+
+
 def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     """Verifies direct export to structured JSON report and residual error scatter plot."""
     # Create sample tie points

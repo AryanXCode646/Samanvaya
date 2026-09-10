@@ -28,12 +28,40 @@
 
 **Samanvaya (समान्वय)** is a research-oriented lunar image correspondence and registration framework for ISRO's **Chandrayaan-2** orbital payloads (**OHRC, TMC-2, IIRS**) and reference planetary datasets (**NASA LRO NAC, JAXA SELENE TC**).
 
+The repository now reflects a more mature engineering posture: mission data ingestion, validation infrastructure, and evidence-aware reporting are implemented, while real-image registration claims remain bounded by actual independent validation. This is a genuine research pipeline rather than a synthetic-only demo.
+
 The framework is designed to handle:
 1. **$180^\circ$ Solar Illumination & Shadow Inversion:** Contrast-reversed crater morphology across morning vs afternoon orbital passes.
 2. **Up to $320\times$ Ground Sampling Distance (GSD) Disparity:** The architecture is designed for multi-scale correspondence across OHRC ($0.25\text{ m/px}$), TMC-2 ($5.0\text{ m/px}$), and cataloged IIRS products ($80.0\text{ m/px}$); IIRS cube registration remains future work.
-3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement, currently benchmarked on synthetic data; real orbital evaluation remains pending data acquisition.
+3. **Rigorous Sub-Pixel Accuracy Mandate:** Continuous analytical Taylor-series Hessian refinement, benchmarked on synthetic data and design-level validation; real orbital RMSE remains pending independent mission data acquisition.
 4. **Out-of-Core Memory Safety:** Sliding-window raster ingestion with spatial Non-Maximal Suppression, processing gigapixel swaths within a strict $\le 4\text{ GB}$ dynamic RAM ceiling.
 5. **Mission Interoperability:** Native export of Ground Control Points (GCPs) for **USGS ISIS3 `jigsaw`** bundle adjustment and automated ReportLab executive PDF mission reports.
+
+## Current Validation Status
+
+### Demonstrated
+- Real mission-product metadata ingestion and conservative validation scaffolding
+- Mission-aware product cataloging for Chandrayaan-2 OHRC, TMC-2, IIRS, LRO NAC, and SELENE-style fixtures
+- Real-data evidence manifests and validation documentation
+- Synthetic benchmark execution with deterministic, reproducible metrics
+- Defensive handling of PDS4/XML and raster inputs with security safeguards
+
+### Synthetic validation
+- Synthetic benchmark numbers for Apollo 11, TMC-2 stereo, extreme lighting, and 180° shadow reversal are present and intentionally labeled as synthetic
+- These values are useful for algorithmic sanity checks and engineering validation, but they are not real mission-data RMSE claims
+
+### Real-data validation
+- Real metadata and lazy-access checks are implemented for representative mission products when available
+- The repository is structured to support end-to-end real-data validation, but the actual LRO/NAC and Chandrayaan-2 pair must still be supplied and executed
+- Real-image registration results are only reported under the real-data evidence path once the pair is validated and an independent reference is available
+
+### Not yet validated
+- Full OHRC ↔ LRO NAC end-to-end registration accuracy on a real pair
+- Real inlier-ratio and RMSE claims on mission imagery
+- Real IIRS spectral-to-2D registration
+- Full scientifically defensible multi-mission performance under a single checked-in ground-truth dataset
+
+The repository is therefore best described as a serious, evidence-aware lunar registration framework with a clear real-data validation path, not as a project that has completed real orbital scientific validation without the necessary mission data.
 
 [**🎤 5-Minute Pitch Deck**](PITCH_DECK.md)
 
