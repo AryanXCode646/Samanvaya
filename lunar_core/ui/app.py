@@ -47,42 +47,202 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    :root {
+        --bg-base: #07141d;
+        --bg-panel: rgba(11, 20, 30, 0.88);
+        --bg-panel-strong: rgba(14, 26, 38, 0.98);
+        --border-soft: rgba(147, 186, 255, 0.18);
+        --border-strong: rgba(147, 186, 255, 0.33);
+        --text-primary: #ecf7ff;
+        --text-muted: #b3cfee;
+        --text-faint: #8aa7c8;
+        --accent: #73c8ff;
+        --accent-strong: #8ddcff;
+        --success: #6fe3a4;
+        --warning: #f9d871;
+        --danger: #ff7a7a;
+        --shadow: rgba(0, 0, 0, 0.35);
+    }
+
     .stApp {
-        background: linear-gradient(180deg, #07131d 0%, #0b1622 100%);
+        background:
+            radial-gradient(circle at top left, rgba(116, 182, 255, 0.12), transparent 30%),
+            radial-gradient(circle at top right, rgba(99, 236, 197, 0.08), transparent 26%),
+            linear-gradient(180deg, #06121a 0%, #0a1723 40%, #091720 100%);
+        color: var(--text-primary);
     }
+
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 1.1rem;
         padding-bottom: 2rem;
+        max-width: 1500px;
     }
+
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, rgba(7, 17, 25, 0.99), rgba(10, 20, 28, 0.98));
+        border-right: 1px solid var(--border-soft);
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.22);
+    }
+
+    [data-testid="stSidebar"] .block-container {
+        background: transparent;
+        padding-top: 1.2rem;
+    }
+
     .portal-shell {
-        background: rgba(14, 26, 37, 0.78);
-        border: 1px solid rgba(160, 204, 255, 0.22);
-        border-radius: 18px;
-        padding: 1.2rem 1.4rem;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
-        backdrop-filter: blur(8px);
+        background: linear-gradient(180deg, rgba(12, 21, 32, 0.92), rgba(13, 23, 33, 0.86));
+        border: 1px solid var(--border-strong);
+        border-radius: 22px;
+        padding: 1.25rem 1.45rem 1rem;
+        box-shadow: 0 20px 55px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.04);
+        backdrop-filter: blur(12px);
+        margin-bottom: 1.25rem;
     }
+
+    .portal-shell h1 {
+        margin: 0;
+        font-size: 2.2rem;
+        letter-spacing: -0.04em;
+        color: var(--text-primary);
+        text-shadow: 0 0 18px rgba(116, 200, 255, 0.18);
+    }
+
+    .portal-shell p {
+        margin-top: 0.55rem;
+        color: var(--text-muted);
+        font-size: 1.02rem;
+    }
+
     .metric-card {
-        background: linear-gradient(180deg, rgba(18, 36, 52, 0.92), rgba(11, 22, 34, 0.92));
-        border: 1px solid rgba(128, 167, 255, 0.3);
-        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(18, 35, 49, 0.96), rgba(10, 21, 30, 0.96));
+        border: 1px solid var(--border-soft);
+        border-radius: 18px;
         padding: 0.9rem 1rem;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        box-shadow: 0 12px 30px rgba(5, 12, 18, 0.25), inset 0 1px 0 rgba(255,255,255,0.04);
     }
+
     .status-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0.4rem 0.8rem;
+        padding: 0.45rem 0.9rem;
         border-radius: 999px;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.02em;
-        background: rgba(104, 206, 145, 0.18);
-        border: 1px solid rgba(104, 206, 145, 0.55);
-        color: #d6ffe8;
+        background: linear-gradient(180deg, rgba(98, 223, 164, 0.18), rgba(98, 223, 164, 0.12));
+        border: 1px solid rgba(111, 227, 164, 0.65);
+        color: #d9ffe9;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
     }
-    .sidebar .block-container {
-        background: rgba(8, 16, 24, 0.96);
+
+    div[data-testid="stDecoration"] {
+        display: none;
+    }
+
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(15, 29, 39, 0.96), rgba(10, 20, 28, 0.96));
+        border: 1px solid var(--border-soft);
+        border-radius: 16px;
+        box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+        padding: 0.8rem 0.9rem;
+    }
+
+    div[data-testid="stMetric"] label {
+        color: var(--text-faint) !important;
+        font-size: 0.78rem !important;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: var(--text-primary) !important;
+        font-size: 1.7rem !important;
+        font-weight: 700 !important;
+        margin-top: 0.15rem;
+    }
+
+    div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
+        color: var(--text-muted) !important;
+        font-size: 0.77rem !important;
+    }
+
+    .stButton > button {
+        border-radius: 12px !important;
+        border: 1px solid rgba(134, 191, 255, 0.38) !important;
+        background: linear-gradient(180deg, rgba(20, 42, 62, 0.98), rgba(12, 25, 38, 0.98)) !important;
+        color: var(--text-primary) !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.01em;
+        box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .stButton > button:hover {
+        border-color: rgba(141, 220, 255, 0.8) !important;
+        box-shadow: 0 14px 28px rgba(26, 96, 161, 0.22) !important;
+        transform: translateY(-1px);
+    }
+
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(180deg, rgba(75, 170, 255, 0.25), rgba(27, 71, 128, 0.9)) !important;
+        border-color: rgba(119, 199, 255, 0.8) !important;
+    }
+
+    .stTabs [role="tablist"] {
+        border-bottom: 1px solid var(--border-soft);
+        gap: 0.55rem;
+    }
+
+    .stTabs [role="tab"] {
+        border-radius: 12px 12px 0 0;
+        padding: 0.7rem 1rem;
+        color: var(--text-muted) !important;
+        font-weight: 600;
+        background: rgba(255,255,255,0.02);
+    }
+
+    .stTabs [role="tab"][aria-selected="true"] {
+        background: linear-gradient(180deg, rgba(26, 42, 57, 0.95), rgba(16, 28, 39, 0.92));
+        border: 1px solid var(--border-strong);
+        border-bottom: none;
+        color: var(--text-primary) !important;
+    }
+
+    .stAlert, .stInfo, .stSuccess, .stWarning, .stError {
+        border-radius: 14px !important;
+        border: 1px solid rgba(148, 176, 230, 0.18) !important;
+        box-shadow: 0 8px 18px rgba(0,0,0,0.14);
+    }
+
+    textarea, input, select {
+        border-radius: 10px !important;
+        border: 1px solid rgba(148, 176, 230, 0.22) !important;
+        background: rgba(10, 20, 28, 0.95) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .stSlider > div > div {
+        background: rgba(255,255,255,0.02);
+    }
+
+    .stDownloadButton > button {
+        background: linear-gradient(180deg, rgba(65, 90, 116, 0.98), rgba(26, 39, 54, 0.98)) !important;
+        border: 1px solid rgba(144, 182, 240, 0.32) !important;
+        color: var(--text-primary) !important;
+    }
+
+    .stFileUploader > section {
+        background: rgba(10, 19, 26, 0.9);
+        border: 1px dashed rgba(141, 197, 255, 0.3);
+        border-radius: 14px;
+    }
+
+    .sidebar .stSelectbox, .sidebar .stSlider {
+        padding-bottom: 0.3rem;
+    }
+
+    .main .stMarkdown {
+        color: var(--text-primary);
     }
     </style>
     """,
@@ -171,6 +331,35 @@ def parse_uploaded_pds4_metadata(uploaded_file) -> Tuple[SunAngles, float, Senso
         return PlanetaryRasterReader.parse_pds4_metadata(temp_path, allowed_dir=temp_path.parent)
     finally:
         temp_path.unlink(missing_ok=True)
+
+
+def moon_preview_image(image: np.ndarray) -> np.ndarray:
+    """Return a realistic lunar-style visualization instead of raw grayscale microworking."""
+    arr = np.asarray(image, dtype=np.float32)
+    if arr.ndim == 2:
+        valid = arr[np.isfinite(arr)]
+        if valid.size == 0:
+            return np.zeros((1, 1, 3), dtype=np.uint8)
+        vmin = float(np.percentile(valid, 1.0))
+        vmax = float(np.percentile(valid, 99.5))
+        denom = max(vmax - vmin, 1e-6)
+        norm = np.clip((arr - vmin) / denom, 0.0, 1.0)
+        gray = (norm * 255.0).astype(np.uint8)
+        rgb = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+        rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+        rgb[..., 0] = np.clip(rgb[..., 0] * 0.78 + 18.0, 0.0, 100.0)
+        rgb[..., 1] = np.clip(rgb[..., 1] * 1.05 + 8.0, -127.0, 128.0)
+        rgb[..., 2] = np.clip(rgb[..., 2] * 1.15 - 12.0, -127.0, 128.0)
+        rgb = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_LAB2RGB)
+        return rgb
+    if arr.ndim == 3 and arr.shape[2] == 1:
+        return moon_preview_image(arr[:, :, 0])
+    if arr.ndim == 3 and arr.shape[2] in (3, 4):
+        rgb = np.clip(arr, 0.0, 1.0)
+        if rgb.dtype != np.uint8:
+            rgb = (rgb * 255.0).astype(np.uint8)
+        return rgb[..., :3]
+    return np.zeros((1, 1, 3), dtype=np.uint8)
 
 
 def load_uploaded_image(uploaded_file) -> np.ndarray:
@@ -708,8 +897,7 @@ if "result_report" in st.session_state:
             swipe_composite[:, :col_split] = img_ref[:, :col_split]
             swipe_composite[:, col_split:] = warped_src[:, col_split:]
 
-            # Draw divider line
-            swipe_rgb = cv2.cvtColor((swipe_composite * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB)
+            swipe_rgb = moon_preview_image(swipe_composite)
             if 0 <= col_split < w:
                 swipe_rgb[:, col_split, :] = [255, 40, 40]  # Red divider
 
@@ -734,7 +922,7 @@ if "result_report" in st.session_state:
                     else:
                         checker[y : y + tile_size, x : x + tile_size] = warped_src[y : y + tile_size, x : x + tile_size]
 
-            st.image(checker, caption=f"50/50 Checkerboard Blend ({tile_size}x{tile_size} px tiles)", width="stretch", clamp=True)
+            st.image(moon_preview_image(checker), caption=f"50/50 Checkerboard Blend ({tile_size}x{tile_size} px tiles)", width="stretch", clamp=True)
 
     # TAB 2: Interactive Side-by-Side Tie-Point Correspondence Plot
     with tab_tiepoints:
@@ -758,7 +946,7 @@ if "result_report" in st.session_state:
             magnitudes = np.hypot(delta_x, delta_y)
 
             flow_fig, flow_ax = plt.subplots(figsize=(10, 7))
-            flow_ax.imshow(img_ref, cmap="gray")
+            flow_ax.imshow(moon_preview_image(img_ref), interpolation="nearest")
             flow = flow_ax.quiver(
                 ref_x, ref_y, delta_x, delta_y, magnitudes,
                 cmap="autumn", angles="xy", scale_units="xy", scale=1.0,
@@ -784,7 +972,7 @@ if "result_report" in st.session_state:
             st.markdown("#### Log-Gabor Phase Congruency (M_max)")
             pc_e = PhaseCongruencyEngine(num_scales=4, num_orientations=6)
             pc_out = pc_e.compute(img_source)
-            st.image(pc_out.max_moment, caption="Maximum Moment (M_max) Invariant Step Edges", width="stretch", clamp=True)
+            st.image(moon_preview_image(pc_out.max_moment), caption="Maximum Moment (M_max) Invariant Step Edges", width="stretch", clamp=True)
 
     # TAB 4: Structured JSON & GIS Export
     with tab_exports:
