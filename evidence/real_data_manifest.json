@@ -3,6 +3,13 @@
   "generated_at": "2026-09-10T00:00:00Z",
   "repository_commit": "local-worktree",
   "validation_scope": "metadata_and_lazy_access_only",
+  "merge_readiness_scope": "metadata_hardening_and_fixture_validation_only",
+  "real_image_validation_status": "pending",
+  "scientific_claims": [
+    "metadata extraction validated using representative fixture structures",
+    "lazy raster access validated for supported detached product layouts",
+    "full end-to-end Chandrayaan-2/LRO image matching remains unverified in this checkout"
+  ],
   "products": [
     {
       "product_id": "CH2_OHR_NRP_EXAMPLE",

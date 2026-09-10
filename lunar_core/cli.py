@@ -251,7 +251,31 @@ def cmd_pair_discover(args: argparse.Namespace) -> None:
 
 
 def cmd_register(args: argparse.Namespace) -> None:
-    """Register a generic source/target mission-product pair."""
+    """Register a mission-product pair through the importable API when real files exist.
+
+    Preserve legacy CLI compatibility for placeholder inputs used by tests and generic
+    workflow wrappers by falling back to the subprocess delegation path when the actual
+    source/target files are not available.
+    """
+    from scripts.register_real_pair import register_pair
+
+    raw_dir = Path(args.raw_dir).expanduser().resolve()
+    source_exists = bool(args.source) and Path(args.source).expanduser().exists()
+    target_exists = bool(args.target) and Path(args.target).expanduser().exists()
+    if source_exists or target_exists or raw_dir.exists():
+        try:
+            exit_code = register_pair(
+                raw_dir=args.raw_dir,
+                output_dir=args.output_dir,
+                source=args.source,
+                target=args.target,
+                site=args.site,
+            )
+        except Exception as exc:  # pragma: no cover - CLI failure path
+            print(f"ERROR: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        raise SystemExit(exit_code)
+
     runner = _PROJECT_ROOT / "scripts" / "register_real_pair.py"
     command = [
         sys.executable,

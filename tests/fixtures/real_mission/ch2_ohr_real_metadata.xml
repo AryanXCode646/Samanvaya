@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1">
+  <Identification_Area>
+    <logical_identifier>urn:isro:ch2:ohrc:product:CH2_OHR_20250612_0001</logical_identifier>
+    <version_id>1.0</version_id>
+    <title>Chandrayaan-2 OHRC product metadata fixture</title>
+    <information_model_version>1.16.0.0</information_model_version>
+  </Identification_Area>
+  <Observation_Area>
+    <Investigation_Area>
+      <name>Chandrayaan-2</name>
+      <type>Mission</type>
+    </Investigation_Area>
+    <Observing_System>
+      <Observing_System_Component>
+        <name>Orbiter High Resolution Camera</name>
+        <type>Instrument</type>
+      </Observing_System_Component>
+    </Observing_System>
+    <Target_Identification>
+      <name>Moon</name>
+      <type>Satellite</type>
+    </Target_Identification>
+  </Observation_Area>
+  <Reference_List>
+    <Internal_Reference>
+      <lid_reference>urn:isro:ch2:ohrc:calibration:baseline</lid_reference>
+      <reference_type>data_to_calibration</reference_type>
+    </Internal_Reference>
+  </Reference_List>
+  <File_Area_Observational>
+    <File>
+      <file_name>CH2_OHR_20250612_0001.img</file_name>
+    </File>
+    <Array_2D_Image>
+      <Axis_Array>
+        <axis_name>LINE</axis_name>
+        <elements>512</elements>
+      </Axis_Array>
+      <Axis_Array>
+        <axis_name>SAMPLE</axis_name>
+        <elements>512</elements>
+      </Axis_Array>
+      <Element_Array>
+        <data_type>UnsignedByte</data_type>
+      </Element_Array>
+    </Array_2D_Image>
+  </File_Area_Observational>
+  <Mission_Area>
+    <product_id>CH2_OHR_20250612_0001</product_id>
+    <instrument_id>OHRC</instrument_id>
+    <ground_sample_distance unit="m">0.28</ground_sample_distance>
+    <solar_azimuth_angle unit="deg">201.2</solar_azimuth_angle>
+    <solar_elevation_angle unit="deg">28.3</solar_elevation_angle>
+    <upper_left_latitude unit="deg">10.0</upper_left_latitude>
+    <upper_left_longitude unit="deg">20.0</upper_left_longitude>
+    <lower_right_latitude unit="deg">12.0</lower_right_latitude>
+    <lower_right_longitude unit="deg">22.0</lower_right_longitude>
+  </Mission_Area>
+</Product_Observational>

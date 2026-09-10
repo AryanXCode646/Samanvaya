@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1">
+  <Identification_Area>
+    <logical_identifier>urn:nasa:pds:lro:nac:product:LRO_LROCNAC_0001</logical_identifier>
+    <version_id>1.0</version_id>
+    <title>LRO NAC product metadata fixture</title>
+    <information_model_version>1.16.0.0</information_model_version>
+  </Identification_Area>
+  <Observation_Area>
+    <Investigation_Area>
+      <name>LRO</name>
+      <type>Mission</type>
+    </Investigation_Area>
+    <Observing_System>
+      <Observing_System_Component>
+        <name>Narrow Angle Camera</name>
+        <type>Instrument</type>
+      </Observing_System_Component>
+    </Observing_System>
+  </Observation_Area>
+  <File_Area_Observational>
+    <File>
+      <file_name>LRO_LROCNAC_0001.img</file_name>
+    </File>
+    <Array_2D_Image>
+      <Axis_Array>
+        <axis_name>LINE</axis_name>
+        <elements>1024</elements>
+      </Axis_Array>
+      <Axis_Array>
+        <axis_name>SAMPLE</axis_name>
+        <elements>1024</elements>
+      </Axis_Array>
+      <Element_Array>
+        <data_type>UnsignedByte</data_type>
+      </Element_Array>
+    </Array_2D_Image>
+  </File_Area_Observational>
+  <Mission_Area>
+    <mission_name>LRO</mission_name>
+    <instrument_name>NAC</instrument_name>
+    <product_id>LRO_LROCNAC_0001</product_id>
+    <ground_sample_distance unit="m">0.50</ground_sample_distance>
+    <upper_left_latitude unit="deg">10.3</upper_left_latitude>
+    <upper_left_longitude unit="deg">20.2</upper_left_longitude>
+    <lower_right_latitude unit="deg">11.8</lower_right_latitude>
+    <lower_right_longitude unit="deg">21.7</lower_right_longitude>
+  </Mission_Area>
+</Product_Observational>

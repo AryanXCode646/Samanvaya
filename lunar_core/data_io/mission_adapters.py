@@ -21,6 +21,36 @@ class MissionAdapter(ABC):
     mission_name: str
     instruments: tuple[str, ...] = ()
 
+    @property
+    def supported_instruments(self) -> tuple[str, ...]:
+        return self.instruments
+
+    @classmethod
+    def canonicalize_mission_name(cls, value: str) -> str:
+        cleaned = (value or "").strip().lower().replace("-", "").replace("_", "")
+        mapping = {
+            "chandrayaan2": "Chandrayaan-2",
+            "ch2": "Chandrayaan-2",
+            "chandrayaan": "Chandrayaan-2",
+            "lro": "LRO",
+            "selene": "SELENE",
+            "kaguya": "SELENE",
+        }
+        return mapping.get(cleaned, value.strip())
+
+    def matches_mission(self, mission: Optional[str]) -> bool:
+        if mission is None:
+            return False
+        return self.canonicalize_mission_name(mission) == self.mission_name
+
+    def matches_instrument(self, instrument: Optional[str]) -> bool:
+        if instrument is None:
+            return False
+        normalized = instrument.strip().upper()
+        aliases = {"OHR": "OHRC", "TMC": "TMC-2", "TMC2": "TMC-2", "LROC_NAC": "NAC", "NAC": "NAC", "LROCNAC": "NAC"}
+        normalized = aliases.get(normalized, normalized)
+        return normalized in {value.upper() for value in self.supported_instruments}
+
     @abstractmethod
     def scan(self, root: Path) -> list[MissionProduct]:
         """Discover products belonging to this mission."""
@@ -30,8 +60,8 @@ class MissionAdapter(ABC):
         selected: list[MissionProduct] = []
         for product in products:
             self._complete_identity(product)
-            if product.mission == self.mission_name and (
-                not self.instruments or product.instrument in self.instruments
+            if self.matches_mission(product.mission) and (
+                not self.instruments or self.matches_instrument(product.instrument)
             ):
                 selected.append(product)
         return selected
@@ -45,7 +75,7 @@ class MissionAdapter(ABC):
         image_stem = product.image_path.stem if product.image_path else None
         mission, instrument = identify_from_product_tokens(product.product_id, image_stem)
         if mission is not None and product.mission is None:
-            if mission != self.mission_name:
+            if self.canonicalize_mission_name(mission) != self.mission_name:
                 return
             product.mission = mission
             product.identification_method = IdentificationMethod.MISSION_SPECIFIC_IDENTIFIER.value
