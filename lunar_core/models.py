@@ -103,6 +103,7 @@ class RegistrationMetrics:
     mean_residual_pixels: float = 0.0
     max_residual_pixels: float = 0.0
     processing_time_ms: float = 0.0
+    ground_truth_available: bool = False
 
     @property
     def inlier_ratio_percent(self) -> float:
@@ -111,8 +112,8 @@ class RegistrationMetrics:
 
     @property
     def meets_isro_mandate(self) -> bool:
-        """ISRO SIH PS 26166 mandate: Sub-pixel RMSE < 0.40 pixels with >= 4 inliers."""
-        return self.rmse_pixels < 0.40 and self.inlier_count >= 4
+        """Scientific validation requires independent ground truth, not reprojection consensus alone."""
+        return self.ground_truth_available and self.rmse_pixels < 0.40 and self.inlier_count >= 4
 
 
 

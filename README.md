@@ -194,6 +194,15 @@ pip install -e .
 - FULL IMAGE-LEVEL REAL-DATA VALIDATION: pending. This repository does not currently contain a checked-in real Chandrayaan-2 or LRO image pair sufficient to claim end-to-end geographic or matching validation.
 - SCIENTIFICALLY VALIDATED: not claimed. Any footprint overlap is labeled as an approximation until independent geospatial validation is available.
 
+### Evidence-backed validation summary
+Scientific claims in this repository are now generated from the project evidence manifest rather than improvised narrative text. Run:
+
+```bash
+python -m lunar_core.cli validation --json
+```
+
+This produces a conservative summary based on [evidence/real_data_manifest.json](evidence/real_data_manifest.json) and the validation matrix in [validation/validation_matrix.md](validation/validation_matrix.md). The current repository status is intentionally limited to metadata-and-lazy-access validation only.
+
 ### Merge-readiness stance
 The current codebase is suitable for a conservative metadata-hardening and workflow-validation pass, but it is not yet a scientifically complete end-to-end lunar mission registration claim. The repo should be considered merge-ready only under the narrower condition that the change is limited to evidence-backed metadata handling, transparent uncertainty states, and reproducible fixture-driven validation—not full real-image scientific validation.
 
