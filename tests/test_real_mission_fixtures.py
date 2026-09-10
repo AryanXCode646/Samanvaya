@@ -1,7 +1,11 @@
+import json
 from pathlib import Path
+
+import numpy as np
 
 from lunar_core.data_io.mission_adapters import adapter_for_mission
 from lunar_core.data_io.mission_catalog import inspect_product
+from scripts.register_real_pair import register_pair
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "real_mission"
@@ -51,3 +55,63 @@ def test_register_pair_api_is_available():
     import scripts.register_real_pair as module
 
     assert hasattr(module, "register_pair")
+
+
+def test_register_pair_accepts_ground_truth_control_points_and_writes_provenance(tmp_path: Path):
+    import rasterio
+    from rasterio.transform import from_origin
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    source_path = raw_dir / "source.tif"
+    target_path = raw_dir / "target.tif"
+    gt_path = tmp_path / "ground_truth.json"
+
+    source = np.random.default_rng(0).normal(0.5, 0.05, size=(64, 64)).astype(np.float32)
+    target = np.random.default_rng(1).normal(0.5, 0.05, size=(64, 64)).astype(np.float32)
+    with rasterio.open(
+        source_path,
+        "w",
+        driver="GTiff",
+        height=source.shape[0],
+        width=source.shape[1],
+        count=1,
+        dtype=source.dtype,
+        crs="EPSG:4326",
+        transform=from_origin(0, 64, 1, 1),
+    ) as dst:
+        dst.write(source, 1)
+    with rasterio.open(
+        target_path,
+        "w",
+        driver="GTiff",
+        height=target.shape[0],
+        width=target.shape[1],
+        count=1,
+        dtype=target.dtype,
+        crs="EPSG:4326",
+        transform=from_origin(0, 64, 1, 1),
+    ) as dst:
+        dst.write(target, 1)
+
+    gt_data = {
+        "source_points": [[10.0, 10.0], [45.0, 12.0], [11.0, 48.0], [47.0, 49.0]],
+        "target_points": [[8.0, 9.0], [42.0, 11.0], [10.0, 46.0], [43.0, 48.0]],
+    }
+    gt_path.write_text(json.dumps(gt_data), encoding="utf-8")
+
+    output_dir = tmp_path / "results"
+    exit_code = register_pair(
+        raw_dir=raw_dir,
+        output_dir=output_dir,
+        source=str(source_path),
+        target=str(target_path),
+        ground_truth=str(gt_path),
+    )
+
+    assert exit_code == 0
+    metrics = json.loads((output_dir / "evaluation_report.json").read_text(encoding="utf-8"))
+    provenance = json.loads((output_dir / "provenance.json").read_text(encoding="utf-8"))
+    assert metrics["metadata"]["ground_truth_available"] is True
+    assert provenance["execution"]["ground_truth_available"] is True
+    assert provenance["execution"]["control_point_file"] == str(gt_path)

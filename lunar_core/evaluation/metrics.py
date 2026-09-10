@@ -427,6 +427,11 @@ class EvaluationEngine:
         inlier_count = len(inliers)
         inlier_ratio_pct = cls.compute_inlier_ratio(inlier_count, total_matches)
         control_point_rmse: Optional[float] = None
+        ground_truth_available = bool(
+            ground_truth_control_points is not None and
+            len(ground_truth_control_points[0]) > 0 and
+            len(ground_truth_control_points[1]) > 0
+        )
 
         if inlier_count >= 4:
             ref_pts = np.array([m.ref_xy for m in inliers], dtype=np.float64)
@@ -476,25 +481,31 @@ class EvaluationEngine:
 
             h_list = homography.tolist() if homography is not None else None
 
-            # Evaluate against ground-truth control points if provided
-            if ground_truth_control_points is not None and homography is not None:
+            # Evaluate against ground-truth control points if provided.
+            # This is the authoritative scientific RMSE whenever GT is supplied, even if
+            # the inlier set is sparse or the final estimator produced a conservative fallback.
+            if ground_truth_available and homography is not None:
                 gt_ref, gt_src = ground_truth_control_points
                 if len(gt_ref) > 0:
                     cp_rmse, _, _ = cls.compute_projective_rmse(gt_ref, gt_src, homography)
                     control_point_rmse = float(cp_rmse)
                     rmse = control_point_rmse
 
-            ground_truth_available = control_point_rmse is not None
-            meets_mandate = bool(ground_truth_available and rmse < 0.40 and inlier_count >= 4)
+            meets_mandate = bool(ground_truth_available and homography is not None and rmse < 0.40 and inlier_count >= 4)
         else:
             rmse, mean_res, median_res, max_res, std_res, ce90, entropy = (
                 999.0, 999.0, 999.0, 999.0, 0.0, 999.0, 0.0
             )
             tie_points = []
             h_list = None
-            control_point_rmse = None
-            ground_truth_available = False
-            meets_mandate = False
+
+            if ground_truth_available and ground_truth_control_points is not None:
+                gt_ref, gt_src = ground_truth_control_points
+                if len(gt_ref) > 0 and homography is not None:
+                    cp_rmse, _, _ = cls.compute_projective_rmse(gt_ref, gt_src, homography)
+                    control_point_rmse = float(cp_rmse)
+                    rmse = control_point_rmse
+            meets_mandate = bool(ground_truth_available and homography is not None and rmse < 0.40 and inlier_count >= 4)
 
         return RegistrationEvaluationReport(
             total_matches=total_matches,
