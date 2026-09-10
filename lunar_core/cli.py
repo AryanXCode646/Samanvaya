@@ -303,6 +303,27 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     print(report.read_text(encoding="utf-8"))
 
 
+def cmd_validation_summary(args: argparse.Namespace) -> None:
+    """Print a conservative validation summary derived from the evidence manifest."""
+    from lunar_core.validation import summarize_validation_evidence
+
+    manifest = Path(args.manifest)
+    if not manifest.is_file():
+        raise FileNotFoundError(f"Validation manifest does not exist: {manifest}")
+
+    summary = summarize_validation_evidence(manifest)
+    if args.json:
+        print(json.dumps(summary, indent=2))
+        return
+
+    print("Scientific validation summary")
+    print(f"Validation scope: {summary['validation_scope']}")
+    print(f"Real image validation status: {summary['real_image_validation_status']}")
+    print(f"Merge-readiness scope: {summary['merge_readiness_scope']}")
+    for pair, row in summary["validation_matrix"].items():
+        print(f"- {pair}: ingestion={row['ingestion']}; registration={row['registration']}; gt={row['ground_truth']}; status={row['status']}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="samanvaya",
@@ -365,6 +386,12 @@ def main() -> None:
     p_evaluate = subparsers.add_parser("evaluate", help="Display a generated evaluation report")
     p_evaluate.add_argument("--report", required=True, help="Path to evaluation_report.json")
     p_evaluate.set_defaults(func=cmd_evaluate)
+
+    # samanvaya validation
+    p_validation = subparsers.add_parser("validation", help="Display the evidence-backed scientific validation summary")
+    p_validation.add_argument("--manifest", default="evidence/real_data_manifest.json", help="Path to the validation manifest")
+    p_validation.add_argument("--json", action="store_true", help="Emit JSON instead of a human-readable summary")
+    p_validation.set_defaults(func=cmd_validation_summary)
 
     # samanvaya info
     p_info = subparsers.add_parser("info", help="Display system and mission configuration")

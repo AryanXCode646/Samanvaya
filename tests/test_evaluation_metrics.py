@@ -86,6 +86,34 @@ def test_spatial_distribution_uniformity_entropy():
     assert np.isclose(entropy_uniform, 1.0, atol=1e-3), f"Uniform points must yield entropy ≈ 1.0, got {entropy_uniform}"
 
 
+def test_reprojection_only_results_do_not_count_as_ground_truth_validation():
+    """Reprojection-consensus metrics are never treated as scientific validation without independent GT."""
+    src_pts = np.array([
+        [10.0, 10.0],
+        [50.0, 10.0],
+        [10.0, 50.0],
+        [50.0, 50.0],
+    ], dtype=np.float64)
+    ref_pts = src_pts + np.array([[0.10, -0.05], [-0.05, 0.20], [0.20, 0.10], [-0.15, -0.15]])
+    H = np.eye(3)
+
+    inliers = [
+        KeypointMatch(ref_xy=(float(ref_pts[i, 0]), float(ref_pts[i, 1])), target_xy=(float(src_pts[i, 0]), float(src_pts[i, 1])), confidence=0.9)
+        for i in range(len(src_pts))
+    ]
+
+    report = EvaluationEngine.generate_report(
+        total_matches=10,
+        inliers=inliers,
+        image_shape=(100, 100),
+        homography=H,
+    )
+
+    assert report.ground_truth_available is False
+    assert report.meets_isro_mandate is False
+    assert report.metric_basis == "reprojection_consensus"
+
+
 def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     """Verifies direct export to structured JSON report and residual error scatter plot."""
     # Create sample tie points
@@ -122,7 +150,7 @@ def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     assert report.total_matches == 10
     assert report.inlier_ratio_percent == 50.0
     assert report.rmse_pixels < 0.40
-    assert report.meets_isro_mandate
+    assert report.meets_isro_mandate is False
     assert report.ground_truth_available is False
     assert report.metric_basis == "reprojection_consensus"
     assert report.spatial_uniformity_entropy > 0.0
@@ -136,7 +164,7 @@ def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     assert parsed["metadata"]["mission"] == "ISRO Chandrayaan-2 Planetary Remote Sensing"
     assert parsed["summary"]["inlier_ratio_percent"] == 50.0
     assert parsed["summary"]["rmse_pixels"] < 0.40
-    assert parsed["summary"]["meets_isro_mandate"] is True
+    assert parsed["summary"]["meets_isro_mandate"] is False
     assert parsed["metadata"]["ground_truth_available"] is False
     assert parsed["metadata"]["metric_basis"] == "reprojection_consensus"
     assert len(parsed["tie_points"]) == 5

@@ -79,6 +79,7 @@ class RegistrationEvaluationReport:
             mean_residual_pixels=self.mean_residual_pixels,
             max_residual_pixels=self.max_residual_pixels,
             processing_time_ms=self.processing_time_ms,
+            ground_truth_available=self.ground_truth_available,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -393,9 +394,12 @@ class EvaluationEngine:
         image_shape: Tuple[int, int],
         homography: Optional[np.ndarray] = None,
         processing_time_ms: float = 0.0,
+        ground_truth_control_points: Optional[Tuple[np.ndarray, np.ndarray]] = None,
     ) -> RegistrationMetrics:
         """
         Computes standard RegistrationMetrics with backwards compatibility.
+        Scientific validation requires independent ground truth; no claim is made from
+        reprojection consensus alone.
         """
         report = cls.generate_report(
             total_matches=total_matches,
@@ -403,6 +407,7 @@ class EvaluationEngine:
             image_shape=image_shape,
             homography=homography,
             processing_time_ms=processing_time_ms,
+            ground_truth_control_points=ground_truth_control_points,
         )
         return report.metrics
 
@@ -470,7 +475,6 @@ class EvaluationEngine:
                 })
 
             h_list = homography.tolist() if homography is not None else None
-            meets_mandate = bool(rmse < 0.40 and inlier_count >= 4)
 
             # Evaluate against ground-truth control points if provided
             if ground_truth_control_points is not None and homography is not None:
@@ -478,15 +482,19 @@ class EvaluationEngine:
                 if len(gt_ref) > 0:
                     cp_rmse, _, _ = cls.compute_projective_rmse(gt_ref, gt_src, homography)
                     control_point_rmse = float(cp_rmse)
+
+            ground_truth_available = control_point_rmse is not None
+            meets_mandate = bool(ground_truth_available and rmse < 0.40 and inlier_count >= 4)
         else:
             rmse, mean_res, median_res, max_res, std_res, ce90, entropy = (
                 999.0, 999.0, 999.0, 999.0, 0.0, 999.0, 0.0
             )
             tie_points = []
             h_list = None
+            control_point_rmse = None
+            ground_truth_available = False
             meets_mandate = False
 
-        ground_truth_available = control_point_rmse is not None
         return RegistrationEvaluationReport(
             total_matches=total_matches,
             inlier_count=inlier_count,

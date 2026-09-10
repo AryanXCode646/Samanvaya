@@ -126,7 +126,8 @@ def test_evaluation_metrics_and_entropy():
     assert metrics.inlier_count == 4
     assert metrics.inlier_ratio == 0.40
     assert metrics.rmse_pixels < 0.40
-    assert metrics.meets_isro_mandate
+    assert metrics.meets_isro_mandate is False
+    assert metrics.ground_truth_available is False
     assert metrics.spatial_uniformity_entropy > 0.0
 
 
@@ -151,4 +152,5 @@ def test_end_to_end_lunar_core_pipeline():
     result = pipeline.register(img_ref, img_tgt, sun_m, sun_a)
     assert result.metrics.inlier_count >= 4
     assert result.metrics.rmse_pixels < 0.40
-    assert result.metrics.meets_isro_mandate
+    assert result.metrics.meets_isro_mandate is False
+    assert result.metrics.ground_truth_available is False
