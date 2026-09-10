@@ -19,6 +19,16 @@ class ProductStatus(str, Enum):
     UNSUPPORTED = "unsupported"
 
 
+class IdentificationMethod(str, Enum):
+    """How mission/instrument identity was obtained. Heuristic is never silent."""
+
+    PDS4_METADATA = "pds4_metadata"
+    PRODUCT_IDENTIFIER = "product_identifier"
+    MISSION_SPECIFIC_IDENTIFIER = "mission_specific_identifier"
+    FILENAME_HEURISTIC = "filename_heuristic"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class MissionProduct:
     """A discovered planetary product without loading raster pixels into memory."""
@@ -58,6 +68,9 @@ class MissionProduct:
     product_type: Optional[str] = None
     metadata_source: Optional[str] = None
     identification_method: Optional[str] = None
+    label_association_method: Optional[str] = None
+    geometry_method: Optional[str] = None
+    overlap_status: Optional[str] = None
     status: ProductStatus | str = ProductStatus.DISCOVERED
     validation_status: Optional[str] = None
     validation_message: Optional[str] = None

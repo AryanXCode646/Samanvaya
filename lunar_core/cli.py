@@ -242,7 +242,11 @@ def cmd_pair_discover(args: argparse.Namespace) -> None:
         for target in products[index + 1 :]
         if source.product_id != target.product_id
     ]
-    selected = [pair for pair in candidates if pair["status"] == "candidate"]
+    selected = [
+        pair
+        for pair in candidates
+        if pair["status"] in {"confirmed_overlap", "proximity_candidate"}
+    ]
     print(json.dumps(selected if args.candidates_only else candidates, indent=2))
 
 

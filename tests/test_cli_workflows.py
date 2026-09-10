@@ -52,7 +52,7 @@ def test_catalog_show_prints_manifest(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)[0]["product_id"] == "source"
 
 
-def test_pair_discover_reports_candidate(tmp_path, capsys):
+def test_pair_discover_reports_proximity_candidate(tmp_path, capsys):
     manifest = tmp_path / "products.csv"
     _manifest(manifest)
     args = type(
@@ -62,7 +62,8 @@ def test_pair_discover_reports_candidate(tmp_path, capsys):
     )()
     cmd_pair_discover(args)
     result = json.loads(capsys.readouterr().out)
-    assert result[0]["status"] == "candidate"
+    assert result[0]["status"] == "proximity_candidate"
+    assert result[0]["overlap_status"] == "UNKNOWN"
 
 
 def test_evaluate_prints_existing_report(tmp_path, capsys):

@@ -113,10 +113,12 @@ def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
 
 
 def product_metadata(image_path: Path) -> Tuple[float, Optional[SunAngles]]:
-    label = resolve_product_label(image_path)
-    if label is None:
+    resolution = resolve_product_label(image_path)
+    if not resolution.resolved or resolution.path is None:
         return 1.0, None
-    sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(label, allowed_dir=image_path.parent)
+    sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
+        resolution.path, allowed_dir=image_path.parent
+    )
     return gsd, sun if modality != SensorModality.SYNTHETIC else None
 
 
@@ -153,9 +155,12 @@ def read_product(image_path: Path, modality: SensorModality) -> Tuple[GeoRaster,
     gsd, sun = product_metadata(image_path)
     try:
         if image_path.suffix.lower() == ".img":
-            label = resolve_product_label(image_path)
-            if label is None:
-                raise FileNotFoundError(f"No PDS4 XML label found for {image_path.name}")
+            resolution = resolve_product_label(image_path)
+            if not resolution.resolved or resolution.path is None:
+                raise FileNotFoundError(
+                    resolution.message or f"No PDS4 XML label found for {image_path.name}"
+                )
+            label = resolution.path
             data = read_pds4_image(image_path, label)
             raster = GeoRaster(data=data, modality=modality, gsd_meters=gsd, sun_angles=sun)
         else:
@@ -250,9 +255,15 @@ def run(args: argparse.Namespace) -> None:
         source_input = source_path
         target_input = target_path
         if source_path.suffix.lower() == ".img":
-            source_input = open_pds4_memmap(source_path, resolve_product_label(source_path))
+            source_label = resolve_product_label(source_path)
+            if not source_label.resolved or source_label.path is None:
+                raise FileNotFoundError(source_label.message or f"No PDS4 XML label for {source_path.name}")
+            source_input = open_pds4_memmap(source_path, source_label.path)
         if target_path.suffix.lower() == ".img":
-            target_input = open_pds4_memmap(target_path, resolve_product_label(target_path))
+            target_label = resolve_product_label(target_path)
+            if not target_label.resolved or target_label.path is None:
+                raise FileNotFoundError(target_label.message or f"No PDS4 XML label for {target_path.name}")
+            target_input = open_pds4_memmap(target_path, target_label.path)
         tiled = PlanetaryTileProcessor(tile_size=args.tile_size, overlap=args.overlap)
         tiled_result = tiled.process(source_input, target_input, estimate_coarse_overlap=False)
         total_matches = tiled_result.metrics.total_matches

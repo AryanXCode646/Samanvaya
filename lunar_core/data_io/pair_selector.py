@@ -30,6 +30,8 @@ class ProductPair:
     acquisition_time_delta_seconds: Optional[float] = None
     pair_type: Optional[str] = None
     selection_method: str = "metadata"
+    overlap_status: str = "UNKNOWN"
+    geometry_method: str = "planar_bounding_box_approximation"
 
     def __post_init__(self) -> None:
         if self.pair_id is None:
@@ -55,7 +57,10 @@ class ProductPair:
             "pair_type": self.pair_type,
             "selection_method": self.selection_method,
             "selection_status": self.status,
+            "pair_status": self.status,
             "status": self.status,
+            "overlap_status": self.overlap_status,
+            "geometry_method": self.geometry_method,
             "reason": self.reason,
         }
 
@@ -162,10 +167,40 @@ def propose_pair(source: MissionProduct, target: MissionProduct, max_center_dist
     )
     if overlap_ratio is not None:
         if overlap_ratio <= 0:
-            return ProductPair(**base, status="rejected", reason="Footprints do not intersect.")
-        return ProductPair(**base, status="candidate", reason=f"Footprint overlap is {overlap_ratio:.4f} of the smaller footprint.")
+            return ProductPair(
+                **base,
+                status="rejected",
+                overlap_status="APPROXIMATE",
+                geometry_method="planar_bounding_box_approximation",
+                reason="Footprints do not intersect under the planar bounding-box approximation.",
+            )
+        return ProductPair(
+            **base,
+            status="confirmed_overlap",
+            overlap_status="APPROXIMATE",
+            geometry_method="planar_bounding_box_approximation",
+            reason=f"Footprint overlap is {overlap_ratio:.4f} of the smaller footprint under a planar bounding-box approximation.",
+        )
     if distance is None:
-        return ProductPair(**base, status="insufficient_metadata", reason="Both products need center coordinates.")
+        return ProductPair(
+            **base,
+            status="insufficient_metadata",
+            overlap_status="UNKNOWN",
+            geometry_method="unknown",
+            reason="Both products need center coordinates; no confirmed footprint overlap can be established.",
+        )
     if distance > max_center_distance_deg:
-        return ProductPair(**base, status="rejected", reason=f"Center distance {distance:.4f}° exceeds threshold.")
-    return ProductPair(**base, status="candidate", reason=f"Center proximity {distance:.4f}° is within threshold; footprint overlap is unverified.")
+        return ProductPair(
+            **base,
+            status="rejected",
+            overlap_status="UNKNOWN",
+            geometry_method="unknown",
+            reason=f"Center distance {distance:.4f}° exceeds threshold; footprint overlap remains unverified.",
+        )
+    return ProductPair(
+        **base,
+        status="proximity_candidate",
+        overlap_status="UNKNOWN",
+        geometry_method="unknown",
+        reason=f"Center proximity {distance:.4f}° is within threshold; footprint overlap is unverified and requires explicit validation.",
+    )
