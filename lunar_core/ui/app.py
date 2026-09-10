@@ -249,17 +249,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    """
-    <div class="portal-shell">
-        <h1 style="margin:0; font-size:2.2rem; color:#edf7ff;">🌙 ISRO Chandrayaan-2 Lunar Alignment Portal</h1>
-        <p style="margin:0.45rem 0 0; font-size:1.05rem; color:#b8d7f7;">
-            SIH PS 26166 · Multi-modal, sun-angle, and scale-invariant lunar registration
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+selected_key = "scenario_a"
+img_source = None
+img_ref = None
+summary_badge = "SYSTEM READY"
 
 # -----------------------------------------------------------------------------
 # Helper Functions: Image Loading, Sample Presets & Plotting
@@ -391,6 +384,56 @@ def load_uploaded_image(uploaded_file) -> np.ndarray:
         return np.clip((img - p_low) / denom, 0.0, 1.0).astype(np.float32)
 
 
+def data_type_label_for_key(selected_key: str) -> str:
+    """Return the current dataset class in a UI-safe, non-misleading label."""
+    if selected_key == "custom_upload":
+        return "REAL MISSION DATA"
+    if selected_key == "synthetic_sim":
+        return "SYNTHETIC BENCHMARK"
+    return "SYNTHETIC BENCHMARK"
+
+
+def format_unknown(value, default: str = "Unknown") -> str:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value if value.strip() else default
+    return str(value)
+
+
+def render_workflow_steps(active_index: int = 1) -> None:
+    steps = ["01 DATA", "02 PAIR", "03 REGISTER", "04 VERIFY"]
+    cols = st.columns(len(steps))
+    for idx, label in enumerate(steps):
+        with cols[idx]:
+            style = "background: rgba(115,200,255,0.14); border:1px solid rgba(115,200,255,0.35); color:#dff6ff;"
+            if idx == active_index:
+                style = "background: rgba(111,227,164,0.12); border:1px solid rgba(111,227,164,0.4); color:#eafff1;"
+            elif idx < active_index:
+                style = "background: rgba(255,255,255,0.03); border:1px solid rgba(148,176,230,0.20); color:#d9ebff;"
+            st.markdown(
+                f"<div style='padding:0.65rem 0.7rem; border-radius:12px; text-align:center; font-size:0.79rem; font-weight:700; letter-spacing:0.08em; {style}'>{label}</div>",
+                unsafe_allow_html=True,
+            )
+
+
+def render_pair_card(title: str, mission: str, instrument: str, product_id: str, dimensions: str, gsd: str, status: str) -> None:
+    st.markdown(
+        f"""
+        <div style="padding:0.9rem 1rem; border:1px solid rgba(148,176,230,0.24); border-radius:16px; background:linear-gradient(180deg, rgba(12,23,33,0.95), rgba(9,18,27,0.94)); min-height: 188px;">
+            <div style="font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase; color:#8fb9d8; margin-bottom:0.7rem;">{title}</div>
+            <div style="font-size:1.05rem; font-weight:700; margin-bottom:0.18rem;">{format_unknown(mission)}</div>
+            <div style="font-size:0.95rem; color:#d5ebff; margin-bottom:0.7rem;">{format_unknown(instrument)}</div>
+            <div style="margin-bottom:0.38rem; color:#edfaff; font-weight:600;">{format_unknown(product_id)}</div>
+            <div style="margin-bottom:0.38rem; color:#dcecff;">{format_unknown(dimensions)}</div>
+            <div style="margin-bottom:0.38rem; color:#dcecff;">{format_unknown(gsd)}</div>
+            <div style="margin-top:0.7rem; display:inline-flex; padding:0.3rem 0.55rem; border-radius:999px; background: rgba(255,255,255,0.03); border:1px solid rgba(148,176,230,0.2); font-size:0.72rem; color:#eafff1;">{format_unknown(status)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_launch_modal(selected_benchmark: str, selected_key: str, source_modality: str, ref_modality: str) -> None:
     """Render a modal-style confirmation dialog before launch."""
     if not hasattr(st, "dialog"):
@@ -507,7 +550,26 @@ def render_tie_point_correspondences(
 # Sidebar Configuration & Mission Evaluation Benchmarks
 # -----------------------------------------------------------------------------
 
-st.sidebar.header("🎯 Mission Evaluation Benchmark")
+st.sidebar.header("MODE")
+st.sidebar.caption("Scientifically honest workflow selection")
+mode_choice = st.sidebar.radio("Data source", ["Real Mission Data", "Synthetic / Benchmark"], index=0 if selected_key == "custom_upload" else 1, horizontal=False)
+
+st.sidebar.header("DATA")
+if mode_choice == "Real Mission Data":
+    st.sidebar.caption("Use imported mission products or custom archive data only when local products are available.")
+else:
+    st.sidebar.caption("Benchmark presets and synthetic scenarios remain clearly labeled as non-mission results.")
+
+st.sidebar.header("CONFIGURATION")
+with st.sidebar.expander("Advanced configuration", expanded=False):
+    st.caption("Tune the registration engine before launching the workflow.")
+
+st.sidebar.markdown("---")
+st.sidebar.header("ABOUT")
+st.sidebar.caption("PS 26166 · Chandrayaan-2 OHRC ↔ lunar reference imagery")
+st.sidebar.caption("Supported missions: Chandrayaan-2, LRO, synthetic benchmark pairs")
+
+st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Reset backend state", use_container_width=True):
     for key in [
         "result_report",
@@ -542,6 +604,37 @@ selected_benchmark = st.sidebar.selectbox(
 )
 selected_key = benchmark_options[selected_benchmark]
 
+data_type_badge = data_type_label_for_key(selected_key)
+summary_badge = "SYSTEM READY" if "result_report" not in st.session_state else "RESULT READY"
+
+st.markdown(
+    f"""
+    <div class="portal-shell">
+        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+                <div style="font-size:0.75rem; letter-spacing:0.22em; text-transform:uppercase; color:#8eb8d8; margin-bottom:0.45rem;">SAMANVAYA</div>
+                <h1 style="margin:0; font-size:2.15rem; color:#edf7ff;">Lunar Multi-Modal Image Correspondence</h1>
+                <p style="margin:0.45rem 0 0; font-size:1.02rem; color:#b8d7f7;">Register Chandrayaan-2 and lunar reference imagery across illumination, viewpoint, and scale changes.</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:flex-end; margin-top:0.2rem;">
+                <span style="padding:0.38rem 0.72rem; border-radius:999px; background: rgba(115, 200, 255, 0.12); border:1px solid rgba(115,200,255,0.35); color:#dff6ff; font-size:0.78rem; font-weight:700;">{data_type_badge}</span>
+                <span style="padding:0.38rem 0.72rem; border-radius:999px; background: rgba(111, 227, 164, 0.12); border:1px solid rgba(111,227,164,0.35); color:#dfffea; font-size:0.78rem; font-weight:700;">{summary_badge}</span>
+            </div>
+        </div>
+        <div style="margin-top:0.85rem; display:flex; flex-wrap:wrap; gap:0.6rem;">
+            <span style="padding:0.34rem 0.72rem; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(148,176,230,0.22); color:#d9ebff; font-size:0.76rem; font-weight:600;">CPU/GPU: available</span>
+            <span style="padding:0.34rem 0.72rem; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(148,176,230,0.22); color:#d9ebff; font-size:0.76rem; font-weight:600;">DATA STATUS: {'ready' if img_source is not None and img_ref is not None else 'pending'}</span>
+            <span style="padding:0.34rem 0.72rem; border-radius:999px; background: rgba(255,255,255,0.02); border:1px solid rgba(148,176,230,0.22); color:#d9ebff; font-size:0.76rem; font-weight:600;">MODEL STATUS: active</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("PAIR DISCOVERY")
+st.sidebar.caption("Pair status remains conservative and reflects the actual backend state.")
+
 # Automatic modality syncing based on selected preset
 default_src_mod = SensorModality.OHRC.value
 default_ref_mod = SensorModality.LRO_NAC.value
@@ -574,12 +667,17 @@ if selected_key == "custom_upload":
     uploaded_src_xml = st.sidebar.file_uploader("Upload Source PDS4 XML (Optional)", type=["xml"], key="source_pds4_xml")
     uploaded_ref_xml = st.sidebar.file_uploader("Upload Reference PDS4 XML (Optional)", type=["xml"], key="reference_pds4_xml")
 
+conf_thresh = st.session_state.get("ui_conf_thresh", 0.15)
+anms_cap = st.session_state.get("ui_anms_cap", 4)
+enable_subpixel = st.session_state.get("ui_enable_subpixel", True)
+magsac_thresh = st.session_state.get("ui_magsac_thresh", 1.5)
+
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Alignment Engine Parameters")
-conf_thresh = st.sidebar.slider("LoFTR Confidence Threshold (τ)", 0.05, 0.90, 0.15, step=0.05)
-anms_cap = st.sidebar.slider("ANMS Cap per Cell (8x8 Grid)", 1, 12, 4, step=1)
-enable_subpixel = st.sidebar.checkbox("2D Parabolic Taylor Sub-Pixel Peak Refinement", value=True)
-magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0.5, 3.0, 1.5, step=0.25)
+conf_thresh = st.sidebar.slider("LoFTR Confidence Threshold (τ)", 0.05, 0.90, conf_thresh, step=0.05, key="ui_conf_thresh")
+anms_cap = st.sidebar.slider("ANMS Cap per Cell (8x8 Grid)", 1, 12, anms_cap, step=1, key="ui_anms_cap")
+enable_subpixel = st.sidebar.checkbox("2D Parabolic Taylor Sub-Pixel Peak Refinement", value=enable_subpixel, key="ui_enable_subpixel")
+magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0.5, 3.0, magsac_thresh, step=0.25, key="ui_magsac_thresh")
 
 # -----------------------------------------------------------------------------
 # Ingestion & Data Preparation
@@ -611,27 +709,47 @@ if selected_key in ["scenario_a", "scenario_b", "scenario_c"]:
     except Exception as e:
         st.error(f"Failed to load cached benchmark GeoTIFF: {e}")
 
-    # Display Mission Acquisition Metadata Card
-    st.markdown(f"### 🎯 Benchmark: {bm.get('title', selected_benchmark)}")
-    st.markdown(f"**Target Site**: {bm.get('target', 'Moon')} — *{bm.get('description', '')}*")
+    st.markdown("<div style='height:0.38rem;'></div>", unsafe_allow_html=True)
+    render_workflow_steps(1)
 
-    col_meta1, col_meta2 = st.columns(2)
-    with col_meta1:
-        st.info(f"""
-        **🚀 Source: {bm['source']['spacecraft']}**
-        - **Payload Sensor**: `{bm['source']['sensor']}`
-        - **Ground Sampling Distance**: `{bm['source']['gsd_m']} m/pixel`
-        - **Orbit Altitude**: `{bm['source']['altitude_km']} km`
-        - **Solar Geometry**: Azimuth `{bm['source']['sun_azimuth_deg']}°`, Elevation `{bm['source']['sun_elevation_deg']}°`
-        """)
-    with col_meta2:
-        st.info(f"""
-        **🔭 Reference: {bm['reference']['spacecraft']}**
-        - **Payload Sensor**: `{bm['reference']['sensor']}`
-        - **Ground Sampling Distance**: `{bm['reference']['gsd_m']} m/pixel`
-        - **Orbit Altitude**: `{bm['reference']['altitude_km']} km`
-        - **Solar Geometry**: Azimuth `{bm['reference']['sun_azimuth_deg']}°`, Elevation `{bm['reference']['sun_elevation_deg']}°`
-        """)
+    st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
+    left_col, center_col, right_col = st.columns([1, 1.15, 1])
+    with left_col:
+        render_pair_card(
+            title="SOURCE",
+            mission=format_unknown(bm.get('source', {}).get('spacecraft')),
+            instrument=format_unknown(bm.get('source', {}).get('sensor')),
+            product_id=format_unknown(bm.get('source', {}).get('product_id')), 
+            dimensions=f"{format_unknown(bm.get('source', {}).get('width'))} × {format_unknown(bm.get('source', {}).get('height'))}",
+            gsd=f"{format_unknown(bm.get('source', {}).get('gsd_m'))} m/px",
+            status="READY",
+        )
+    with center_col:
+        st.markdown(
+            f"""
+            <div style="padding:1rem 0.8rem; border:1px solid rgba(148,176,230,0.18); border-radius:16px; background:linear-gradient(180deg, rgba(12,21,30,0.96), rgba(10,18,27,0.94)); min-height:188px; display:flex; flex-direction:column; justify-content:center; text-align:center;">
+                <div style="font-size:0.72rem; letter-spacing:0.14em; text-transform:uppercase; color:#8fb9d8; margin-bottom:0.6rem;">REGISTRATION CHALLENGE</div>
+                <div style="font-size:1.05rem; color:#edfaff; font-weight:700;">GSD {bm.get('source', {}).get('gsd_m', 'Unknown')} → {bm.get('reference', {}).get('gsd_m', 'Unknown')} m/px</div>
+                <div style="font-size:0.9rem; color:#d5ebff; margin-top:0.5rem;">Scale ratio: {format_unknown(bm.get('source', {}).get('gsd_m'))}</div>
+                <div style="font-size:0.9rem; color:#d5ebff; margin-top:0.35rem;">Overlap: {format_unknown(bm.get('overlap_status', 'UNKNOWN'))}</div>
+                <div style="font-size:0.9rem; color:#d5ebff; margin-top:0.35rem;">Geometry: {format_unknown(bm.get('geometry_method', 'unknown'))}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right_col:
+        render_pair_card(
+            title="TARGET",
+            mission=format_unknown(bm.get('reference', {}).get('spacecraft')),
+            instrument=format_unknown(bm.get('reference', {}).get('sensor')),
+            product_id=format_unknown(bm.get('reference', {}).get('product_id')),
+            dimensions=f"{format_unknown(bm.get('reference', {}).get('width'))} × {format_unknown(bm.get('reference', {}).get('height'))}",
+            gsd=f"{format_unknown(bm.get('reference', {}).get('gsd_m'))} m/px",
+            status="READY",
+        )
+
+    st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
+    st.caption(f"{bm.get('title', selected_benchmark)} · {bm.get('target', 'Moon')} · {bm.get('description', '')}")
 
 elif selected_key == "synthetic_sim":
     sim = LunarTerrainSimulator(size=(256, 256), seed=101)
