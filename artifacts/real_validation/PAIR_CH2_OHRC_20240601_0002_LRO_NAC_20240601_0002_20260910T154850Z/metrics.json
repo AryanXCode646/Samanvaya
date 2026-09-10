@@ -1,0 +1,15 @@
+{
+  "pair_id": "PAIR_CH2_OHRC_20240601_0002_LRO_NAC_20240601_0002_20260910T154850Z",
+  "total_matches": 0,
+  "inlier_count": 0,
+  "inlier_ratio": 0.0,
+  "estimated_transform": null,
+  "runtime_ms": 151.9222679999075,
+  "memory_mb": 0.0,
+  "ground_truth_status": "PENDING_INDEPENDENT_GROUND_TRUTH",
+  "rmse_px": null,
+  "p95_px": null,
+  "absolute_accuracy": "PENDING",
+  "source_product_id": "CH2_OHRC_20240601_0002",
+  "reference_product_id": "LRO_NAC_20240601_0002"
+}

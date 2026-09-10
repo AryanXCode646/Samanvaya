@@ -21,6 +21,8 @@ __all__ = [
     "propose_pair",
     "inspect_product",
     "scan",
+    "load_dataset_manifest",
+    "summarize_dataset_status",
 ]
 
 
@@ -51,6 +53,14 @@ def __getattr__(name: str) -> Any:
         from lunar_core.data_io.mission_catalog import scan
 
         return scan
+    if name in {"load_dataset_manifest", "summarize_dataset_status"}:
+        from lunar_core.data_io.dataset_manifest import load_dataset_manifest, summarize_dataset_status
+
+        mapping = {
+            "load_dataset_manifest": load_dataset_manifest,
+            "summarize_dataset_status": summarize_dataset_status,
+        }
+        return mapping[name]
     if name in {"MissionAdapter", "Chandrayaan2Adapter", "LROAdapter", "SeleneAdapter"}:
         from lunar_core.data_io.mission_adapters import (
             Chandrayaan2Adapter,

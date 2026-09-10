@@ -1,0 +1,120 @@
+datasets:
+  - id: ch2_ohrc_example_001
+    mission: Chandrayaan-2
+    spacecraft: Chandrayaan-2
+    instrument: OHRC
+    product_id: TBD
+    product_level: TBD
+    acquisition_utc: TBD
+    latitude: TBD
+    longitude: TBD
+    resolution_m_per_px: TBD
+    image_dimensions: TBD
+    geometry_available: false
+    calibration_status: pending
+    source: ISRO
+    source_url: https://chmapbrowse.issdc.gov.in/
+    local_path: TBD
+    checksum_sha256: TBD
+    license: TBD
+    processing_status: pending
+    registration_suitability: pending
+    validation_status: pending
+    ground_truth_source: TBD
+    notes: "Placeholder manifest entry. Replace with actual product metadata once a verified mission product is available."
+
+  - id: ch2_tmc2_example_001
+    mission: Chandrayaan-2
+    spacecraft: Chandrayaan-2
+    instrument: TMC-2
+    product_id: TBD
+    product_level: TBD
+    acquisition_utc: TBD
+    latitude: TBD
+    longitude: TBD
+    resolution_m_per_px: TBD
+    image_dimensions: TBD
+    geometry_available: false
+    calibration_status: pending
+    source: ISRO
+    source_url: https://chmapbrowse.issdc.gov.in/
+    local_path: TBD
+    checksum_sha256: TBD
+    license: TBD
+    processing_status: pending
+    registration_suitability: pending
+    validation_status: pending
+    ground_truth_source: TBD
+    notes: "Placeholder manifest entry. Replace with actual product metadata once a verified mission product is available."
+
+  - id: ch2_iirs_example_001
+    mission: Chandrayaan-2
+    spacecraft: Chandrayaan-2
+    instrument: IIRS
+    product_id: TBD
+    product_level: TBD
+    acquisition_utc: TBD
+    latitude: TBD
+    longitude: TBD
+    resolution_m_per_px: TBD
+    image_dimensions: TBD
+    geometry_available: false
+    calibration_status: pending
+    source: ISRO
+    source_url: https://chmapbrowse.issdc.gov.in/
+    local_path: TBD
+    checksum_sha256: TBD
+    license: TBD
+    processing_status: pending
+    registration_suitability: pending
+    validation_status: pending
+    ground_truth_source: TBD
+    notes: "IIRS is treated as a spectral-cube instrument, not a grayscale optical image. Real registration support remains data- and implementation-dependent."
+
+  - id: lro_nac_example_001
+    mission: LRO
+    spacecraft: LRO
+    instrument: LROC NAC
+    product_id: TBD
+    product_level: TBD
+    acquisition_utc: TBD
+    latitude: TBD
+    longitude: TBD
+    resolution_m_per_px: TBD
+    image_dimensions: TBD
+    geometry_available: false
+    calibration_status: pending
+    source: LROC PDS
+    source_url: https://lroc.im-ldi.com/images/downloads/
+    local_path: TBD
+    checksum_sha256: TBD
+    license: TBD
+    processing_status: pending
+    registration_suitability: pending
+    validation_status: pending
+    ground_truth_source: TBD
+    notes: "Candidate reference dataset. Use actual PDS-delivered products for quantitative validation instead of web thumbnails."
+
+  - id: selene_example_001
+    mission: SELENE
+    spacecraft: KAGUYA
+    instrument: SELENE/TC
+    product_id: TBD
+    product_level: TBD
+    acquisition_utc: TBD
+    latitude: TBD
+    longitude: TBD
+    resolution_m_per_px: TBD
+    image_dimensions: TBD
+    geometry_available: false
+    calibration_status: pending
+    source: JAXA/ISAS DARTS
+    source_url: https://darts.isas.jaxa.jp/app/pdap/selene/
+    local_path: TBD
+    checksum_sha256: TBD
+    license: TBD
+    processing_status: pending
+    registration_suitability: pending
+    validation_status: pending
+    ground_truth_source: TBD
+    notes: "Independent mission reference dataset placeholder for cross-mission validation."

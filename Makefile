@@ -1,6 +1,6 @@
 # Samanvaya Makefile: Single-Command Automation for ISRO Chandrayaan-2 Registration
 
-.PHONY: install run test clean info help pipeline metrics evaluate verify-raster report-pdf prefetch-weights
+.PHONY: install run test clean info help pipeline metrics evaluate verify-raster report-pdf prefetch-weights dataset-manifest validate-datasets preprocess-real-data run-real-benchmark run-ablation generate-report validate-real-pair
 
 PYTHON := python3
 PIP := pip
@@ -47,6 +47,42 @@ verify-raster:
 report-pdf:
 	@echo "📄 Generating ISRO Mission Registration PDF Report..."
 	$(PYTHON) -m lunar_core.evaluation.pdf_reporter
+
+# Real-data validation workflow scaffold. This is intentionally conservative and does not fabricate mission results.
+dataset-manifest:
+	@echo "📦 Validating mission dataset manifest..."
+	$(PYTHON) -c "from lunar_core.data_io.dataset_manifest import load_dataset_manifest; print(load_dataset_manifest('datasets/manifest.yaml'))"
+
+validate-datasets:
+	@echo "🧪 Checking dataset readiness status..."
+	$(PYTHON) -c "from lunar_core.data_io.dataset_manifest import summarize_dataset_status; import json; print(json.dumps(summarize_dataset_status('datasets/manifest.yaml'), indent=2))"
+
+preprocess-real-data:
+	@echo "📥 Real-data preprocessing is data-dependent and remains pending external mission products."
+	@echo "This step prepares the pipeline for externally supplied mission data without fabricating results."
+
+run-real-benchmark:
+	@echo "🛰️ Real benchmark execution requires checked-in mission products and independent ground truth."
+	@echo "No real-mission validation is claimed until those datasets are provided."
+
+run-ablation:
+	@echo "📊 Ablation study entry point is prepared for real-data runs; current execution is blocked by missing external datasets."
+	@echo "Synthetic and real results remain explicitly separated."
+
+generate-report:
+	@echo "📄 Generating the real-data validation report scaffold..."
+	@echo "This repository is intentionally limited to evidence-backed synthetic + manifest validation until real dataset inputs exist."
+
+validate-real-pair:
+	@test -n "$(OHRC)" && test -n "$(LROC)" || { echo "Usage: make validate-real-pair OHRC=/path/to/ohrc LROC=/path/to/lroc"; exit 1; }
+	@echo "📥 Importing real OHRC ↔ LROC pair..."
+	$(PYTHON) -m samanvaya.data_io.import_real_pair --ohrc "$(OHRC)" --lroc "$(LROC)" --manifest data/real/manifest.json --artifact-root artifacts/real_validation
+	@PAIR_ID=$$($(PYTHON) -c "import json, pathlib; p=pathlib.Path('data/real/manifest.json'); data=json.loads(p.read_text()) if p.exists() else {}; pairs=data.get('pairs',[]); print(pairs[-1]['pair_id'] if pairs else 'PAIR_MISSING')"); \
+	if [ "$$PAIR_ID" = "PAIR_MISSING" ]; then echo "No imported pair found in manifest."; exit 1; fi; \
+	$(PYTHON) -m samanvaya.validation.run_real_pair --pair-id "$$PAIR_ID" --manifest data/real/manifest.json --artifact-root artifacts/real_validation; \
+	$(PYTHON) -m samanvaya.validation.evaluate_real_pair --pair-id "$$PAIR_ID" --manifest data/real/manifest.json
+	@echo "📄 Benchmark report template: docs/REAL_PAIR_BENCHMARK.md"
+	@echo "Current ground-truth status is reported as PENDING unless independent control points are supplied."
 
 prefetch-weights:
 	@echo "⬇️ Prefetching LoFTR pretrained weights..."
