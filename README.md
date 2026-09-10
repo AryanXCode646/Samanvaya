@@ -7,13 +7,13 @@
 
 > **Local real-product evidence:** The ingestion harness has been exercised against locally supplied Chandrayaan-2 OHRC and Chandrayaan-1 HySI PDS4 labels using sparse temporary files. OHRC metadata and lazy 2-D access passed; HySI was classified as a 64-band partial spectral product. No registration accuracy claim is made from this metadata/access check.
 
-[![ISRO SIH PS 26166](https://img.shields.io/badge/ISRO-SIH%20PS%2026166-0284c7?style=for-the-badge&logo=nasa&logoColor=white)](https://github.com/AryanXCode646/Samanvaya)
+[![ISRO SIH PS 26166](https://img.shields.io/badge/ISRO-SIH%20PS%2026166-0284c7?style=for-the-badge&logo=nasa&logoColor=white)](https://github.com/ashishsinghbora/Samanvaya)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
 [![Kornia 0.8](https://img.shields.io/badge/Kornia-0.8-10b981?style=for-the-badge)](https://kornia.readthedocs.io)
 [![GDAL / Rasterio](https://img.shields.io/badge/GDAL%20%2F%20Rasterio-1.3%2B-2563eb?style=for-the-badge&logo=qgis&logoColor=white)](https://rasterio.readthedocs.io)
-[![Tests](https://img.shields.io/badge/Tests-run%20pytest%20tests%2F-emerald?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/AryanXCode646/Samanvaya)
-[![CI](https://github.com/AryanXCode646/Samanvaya/actions/workflows/ci.yml/badge.svg)](https://github.com/AryanXCode646/Samanvaya/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/Tests-run%20pytest%20tests%2F-emerald?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/ashishsinghbora/Samanvaya)
+[![CI](https://github.com/ashishsinghbora/Samanvaya/actions/workflows/ci.yml/badge.svg)](https://github.com/ashishsinghbora/Samanvaya/actions/workflows/ci.yml)
 [![Security Hardened](https://img.shields.io/badge/Security-XXE%20%26%20Decompression%20Shielded-blueviolet?style=for-the-badge)](SECURITY.md)
 [![License MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
@@ -176,8 +176,8 @@ $$H_{\text{spatial}} = -\sum_{k=1}^K p_k \log_2(p_k) \Big/ \log_2(K) \quad \ge 0
 
 ### Installation
 ```bash
-# Clone the repository
-git clone https://github.com/AryanXCode646/Samanvaya.git
+# Clone the canonical upstream repository
+git clone https://github.com/ashishsinghbora/Samanvaya.git
 cd Samanvaya
 
 # Setup virtual environment and install dependencies
@@ -186,6 +186,18 @@ source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
+
+### Validation status
+- IMPLEMENTED: mission-data ingestion, PDS4 label resolution, conservative metadata parsing, registration pipeline scaffolding, and evaluation exports.
+- TESTED: deterministic identity and catalog regressions; synthetic benchmark pipeline checks; no real-mission scientific claim is made from these results.
+- REAL-DATA TESTED: metadata and lazy-access validation only for locally supplied mission products when present; no registration-accuracy claim is implied.
+- SCIENTIFICALLY VALIDATED: not claimed. Any footprint overlap is labeled as an approximation until independent geospatial validation is available.
+
+### Footprint geometry scope
+Samanvaya currently records box-style footprint overlap as a planar bounding-box approximation. The `geometry_method` field is set to `planar_bounding_box_approximation`, and `overlap_status` is one of `APPROXIMATE`, `VERIFIED`, or `UNKNOWN`. Do not interpret planar overlap as a physically meaningful lunar footprint intersection without separate geodesic validation.
+
+### Pair/status semantics
+A proximity-only match is not treated as an overlap-confirmed pair. When no valid footprint exists, the pair is staged as `proximity_candidate` with `overlap_status = "UNKNOWN"` and requires explicit later validation.
 
 Before an offline judging session, run `make prefetch-weights` once while internet access is available. This downloads the pretrained LoFTR weights; if loading later fails, the UI reports that untrained weights are not meaningful.
 

@@ -99,9 +99,14 @@ class PlanetaryRasterReader:
             raise FileNotFoundError(f"GeoTIFF file not found: {path}")
 
         if path.suffix.lower() == ".img":
-            label_path = path.with_suffix(".xml")
-            if not label_path.exists():
-                raise FileNotFoundError(f"PDS4 XML label not found for detached image: {label_path}")
+            from lunar_core.data_io.product_identity import resolve_product_label
+
+            resolution = resolve_product_label(path)
+            if not resolution.resolved or resolution.path is None:
+                raise FileNotFoundError(
+                    resolution.message or f"PDS4 XML label not found for detached image: {path}"
+                )
+            label_path = resolution.path
             return PlanetaryRasterReader._read_pds4_image(
                 path,
                 label_path,
@@ -500,24 +505,20 @@ class PlanetaryRasterReader:
                         gsd = parsed
                         break
 
-        sensor_text = " ".join(
-            node.text for node in root.iter() if node.text and node.text.strip()
-        ).upper()
-        if "OHRC" in sensor_text:
-            modality = SensorModality.OHRC
-            gsd = gsd if gsd != 1.0 else 0.25
-        elif "TMC" in sensor_text:
-            modality = SensorModality.TMC2
-            gsd = gsd if gsd != 1.0 else 5.0
-        elif "IIRS" in sensor_text:
-            modality = SensorModality.IIRS
-            gsd = gsd if gsd != 1.0 else 80.0
-        elif "HYSI" in sensor_text or "HYPER SPECTRAL IMAGER" in sensor_text:
-            modality = SensorModality.HYSI
-            gsd = gsd if gsd != 1.0 else 80.0
-        elif "NAC" in sensor_text or "LROC" in sensor_text:
-            modality = SensorModality.LRO_NAC
-            gsd = gsd if gsd != 1.0 else 0.5
+        from lunar_core.data_io.product_identity import identify_mission_instrument
+
+        _mission, instrument, _method = identify_mission_instrument(safe_path, root)
+        instrument_to_modality = {
+            "OHRC": (SensorModality.OHRC, 0.25),
+            "TMC-2": (SensorModality.TMC2, 5.0),
+            "IIRS": (SensorModality.IIRS, 80.0),
+            "HYSI": (SensorModality.HYSI, 80.0),
+            "NAC": (SensorModality.LRO_NAC, 0.5),
+        }
+        if instrument in instrument_to_modality:
+            modality, default_gsd = instrument_to_modality[instrument]
+            if gsd == 1.0:
+                gsd = default_gsd
 
         sun = SunAngles(azimuth_deg=sun_az, elevation_deg=sun_el) if sun_az is not None and sun_el is not None else None
         return sun, gsd, modality

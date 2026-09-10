@@ -34,11 +34,12 @@ def main() -> int:
     failures = 0
     for image_path in images:
         print(f"\nProduct: {image_path}")
-        label_path = resolve_product_label(image_path)
-        if label_path is None:
-            print("ERROR: canonical PDS4 label resolution was ambiguous or missing")
+        resolution = resolve_product_label(image_path)
+        if not resolution.resolved or resolution.path is None:
+            print(f"ERROR: {resolution.message or 'canonical PDS4 label resolution failed'}")
             failures += 1
             continue
+        label_path = resolution.path
         try:
             product = inspect_product(image_path, root_dir=data_dir)
             status = product.status.value if hasattr(product.status, "value") else product.status

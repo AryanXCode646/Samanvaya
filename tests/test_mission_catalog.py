@@ -23,6 +23,8 @@ def test_catalog_inspects_detached_ohrc_product_without_loading_pixels(tmp_path:
   <start_date_time>2025-06-12T20:31:04Z</start_date_time>
   <processing_level>Raw</processing_level>
   <product_class>Product_Observational</product_class>
+  <mission_name>Chandrayaan-2</mission_name>
+  <instrument_id>OHRC</instrument_id>
   <name>Chandrayaan-2 Orbiter High Resolution Camera OHRC</name>
   <isda:pixel_resolution>0.28</isda:pixel_resolution>
   <isda:sun_azimuth>201.2</isda:sun_azimuth>
@@ -46,6 +48,8 @@ def test_catalog_inspects_detached_ohrc_product_without_loading_pixels(tmp_path:
     assert product.status == "validated"
     assert product.mission == "Chandrayaan-2"
     assert product.instrument == "OHRC"
+    assert product.identification_method == "pds4_metadata"
+    assert product.label_association_method == "same_stem"
     assert product.width == 5
     assert product.height == 4
     assert product.gsd_m == 0.28
@@ -181,7 +185,7 @@ def test_chandrayaan_adapter_recovers_identity_from_product_identifier(tmp_path:
     assert len(products) == 1
     assert products[0].mission == "Chandrayaan-2"
     assert products[0].instrument == "OHRC"
-    assert products[0].identification_method == "product_id"
+    assert products[0].identification_method == "mission_specific_identifier"
 
 
 def test_pair_selector_does_not_invent_overlap_without_coordinates(tmp_path: Path):
@@ -194,7 +198,7 @@ def test_pair_selector_does_not_invent_overlap_without_coordinates(tmp_path: Pat
     assert pair.overlap_ratio is None
     assert pair.gsd_ratio == 0.5 / 0.28
 
-def test_pair_selector_marks_nearby_products_as_candidates(tmp_path: Path):
+def test_pair_selector_marks_nearby_products_as_proximity_candidates(tmp_path: Path):
     source = MissionProduct(
       "Chandrayaan-2", "OHRC", "source", tmp_path / "source.img",
       gsd_m=0.28, center_lat_deg=10.0, center_lon_deg=20.0,
@@ -206,8 +210,12 @@ def test_pair_selector_marks_nearby_products_as_candidates(tmp_path: Path):
 
     pair = propose_pair(source, target)
 
-    assert pair.status == "candidate"
+    assert pair.status == "proximity_candidate"
+    assert pair.overlap_status == "UNKNOWN"
+    assert pair.geometry_method == "unknown"
     assert pair.reason.startswith("Center proximity")
+
+
 def test_pair_selector_uses_footprint_intersection_when_available(tmp_path: Path):
     source = MissionProduct(
       "Chandrayaan-2", "OHRC", "source", tmp_path / "source.img",
@@ -220,7 +228,9 @@ def test_pair_selector_uses_footprint_intersection_when_available(tmp_path: Path
 
     pair = propose_pair(source, target)
 
-    assert pair.status == "candidate"
+    assert pair.status == "confirmed_overlap"
+    assert pair.overlap_status == "APPROXIMATE"
+    assert pair.geometry_method == "planar_bounding_box_approximation"
     assert pair.overlap_ratio == 0.25
     assert pair.intersection_area == 1.0
     assert pair.source_area == 4.0
@@ -228,6 +238,8 @@ def test_pair_selector_uses_footprint_intersection_when_available(tmp_path: Path
     assert pair.selection_method == "footprint_intersection"
     assert pair.pair_id == "source__target"
     assert pair.reason.startswith("Footprint overlap")
+
+
 def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
     source = MissionProduct(
       "Chandrayaan-2", "OHRC", "source", tmp_path / "source.img",
@@ -241,4 +253,5 @@ def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
     pair = propose_pair(source, target)
 
     assert pair.status == "rejected"
+    assert pair.overlap_status == "APPROXIMATE"
     assert pair.overlap_ratio == 0.0

@@ -303,12 +303,15 @@ class PlanetaryTileProcessor:
         """
         if isinstance(raster_input, (str, Path)):
             if Path(raster_input).suffix.lower() in {".img", ".qub"}:
-                from lunar_core.data_io.mission_catalog import resolve_product_label
+                from lunar_core.data_io.product_identity import resolve_product_label
                 from lunar_core.data_io.raster_reader import PlanetaryRasterReader
 
-                label = resolve_product_label(Path(raster_input))
-                if label is None:
-                    raise FileNotFoundError(f"PDS4 XML label not found for {raster_input}")
+                resolution = resolve_product_label(Path(raster_input))
+                if not resolution.resolved or resolution.path is None:
+                    raise FileNotFoundError(
+                        resolution.message or f"PDS4 XML label not found for {raster_input}"
+                    )
+                label = resolution.path
                 mapped = PlanetaryRasterReader.open_pds4_memmap(raster_input, label)
                 r_start = int(window.row_off)
                 r_end = int(window.row_off + window.height)
