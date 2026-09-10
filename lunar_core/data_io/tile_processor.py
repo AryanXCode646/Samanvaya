@@ -255,6 +255,18 @@ class PlanetaryTileProcessor:
         min_x, min_y, max_x, max_y = roi_bbox
         total_h, total_w = image_shape
 
+        if total_h <= 0 or total_w <= 0:
+            raise ValueError(f"image_shape must be positive, got {image_shape}")
+        if min_x >= max_x or min_y >= max_y:
+            raise ValueError(f"roi_bbox must have positive area, got {roi_bbox}")
+
+        min_x = max(0, min(min_x, total_w))
+        max_x = max(0, min(max_x, total_w))
+        min_y = max(0, min(min_y, total_h))
+        max_y = max(0, min(max_y, total_h))
+        if min_x >= max_x or min_y >= max_y:
+            raise ValueError(f"roi_bbox does not intersect image_shape: {roi_bbox} vs {image_shape}")
+
         y = min_y
         while y < max_y:
             x = min_x
@@ -290,10 +302,27 @@ class PlanetaryTileProcessor:
         Safely extracts 2D float32 pixel data for a specific window.
         """
         if isinstance(raster_input, (str, Path)):
-            with rasterio.open(str(raster_input)) as src:
-                data = src.read(1, window=window).astype(np.float32)
-                if src.nodata is not None:
-                    data[data == src.nodata] = np.nan
+            if Path(raster_input).suffix.lower() in {".img", ".qub"}:
+                from lunar_core.data_io.product_identity import resolve_product_label
+                from lunar_core.data_io.raster_reader import PlanetaryRasterReader
+
+                resolution = resolve_product_label(Path(raster_input))
+                if not resolution.resolved or resolution.path is None:
+                    raise FileNotFoundError(
+                        resolution.message or f"PDS4 XML label not found for {raster_input}"
+                    )
+                label = resolution.path
+                mapped = PlanetaryRasterReader.open_pds4_memmap(raster_input, label)
+                r_start = int(window.row_off)
+                r_end = int(window.row_off + window.height)
+                c_start = int(window.col_off)
+                c_end = int(window.col_off + window.width)
+                data = np.asarray(mapped[r_start:r_end, c_start:c_end], dtype=np.float32)
+            else:
+                with rasterio.open(str(raster_input)) as src:
+                    data = src.read(1, window=window).astype(np.float32)
+                    if src.nodata is not None:
+                        data[data == src.nodata] = np.nan
         elif isinstance(raster_input, rasterio.DatasetReader):
             data = raster_input.read(1, window=window).astype(np.float32)
             if raster_input.nodata is not None:
@@ -303,6 +332,15 @@ class PlanetaryTileProcessor:
             r_end = int(window.row_off + window.height)
             c_start = int(window.col_off)
             c_end = int(window.col_off + window.width)
+            if (
+                r_start < 0
+                or c_start < 0
+                or r_end > raster_input.shape[0]
+                or c_end > raster_input.shape[1]
+                or r_start >= r_end
+                or c_start >= c_end
+            ):
+                raise ValueError(f"Window {window} is outside raster bounds {raster_input.shape}")
             data = raster_input[r_start:r_end, c_start:c_end].astype(np.float32)
         else:
             raise TypeError(f"Unsupported raster type: {type(raster_input)}")

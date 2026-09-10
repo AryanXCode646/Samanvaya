@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-09-10T00:00:00Z",
+  "repository_commit": "local-worktree",
+  "validation_scope": "metadata_and_lazy_access_only",
+  "merge_readiness_scope": "metadata_hardening_and_fixture_validation_only",
+  "real_image_validation_status": "pending",
+  "scientific_claims": [
+    "metadata extraction validated using representative fixture structures",
+    "lazy raster access validated for supported detached product layouts",
+    "full end-to-end Chandrayaan-2/LRO image matching remains unverified in this checkout"
+  ],
+  "products": [
+    {
+      "product_id": "CH2_OHR_NRP_EXAMPLE",
+      "mission": "Chandrayaan-2",
+      "instrument": "OHRC",
+      "image_format": "img",
+      "image_path": "ch2_ohr_nrp_example.img",
+      "label_path": "ch2_ohr_nrp_example.xml",
+      "width": 5,
+      "height": 4,
+      "bands": 1,
+      "gsd_m": 0.28,
+      "gsd_source": "pds4",
+      "footprint": [[20.0, 10.0], [22.0, 10.0], [22.0, 12.0], [20.0, 12.0]],
+      "geometry_method": "planar_bounding_box_approximation",
+      "metadata_source": "pds4_label",
+      "identification_method": "pds4_metadata",
+      "status": "metadata_validated",
+      "validation_scope": "metadata_and_lazy_access_only"
+    },
+    {
+      "product_id": "CH1_HYSI_TEST_PRODUCT",
+      "mission": "Chandrayaan-1",
+      "instrument": "HYSI",
+      "image_format": "qub",
+      "image_path": "ch1_hys_product.qub",
+      "label_path": "ch1_hys_product.xml",
+      "width": 5,
+      "height": 4,
+      "bands": 64,
+      "gsd_m": null,
+      "gsd_source": "unknown",
+      "footprint": null,
+      "geometry_method": "unknown",
+      "metadata_source": "pds4_label",
+      "identification_method": "pds4_metadata",
+      "status": "ingestion_validated",
+      "validation_scope": "metadata_and_lazy_access_only"
+    }
+  ],
+  "capabilities": {
+    "metadata_validated": true,
+    "ingestion_validated": true,
+    "registration_executed": false,
+    "ground_truth_available": false
+  }
+}

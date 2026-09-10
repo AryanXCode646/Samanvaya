@@ -108,6 +108,22 @@ class TestPlanetaryTileProcessor:
         assert last_win.col_off + last_win.width <= 4096
         assert last_win.row_off + last_win.height <= 4096
 
+    def test_window_generation_clamps_roi_to_image_bounds(self):
+        processor = PlanetaryTileProcessor(tile_size=1024, overlap=128)
+
+        windows = list(processor.generate_windows((-100, -50, 1200, 1100), (1024, 1024)))
+
+        assert windows[0] == Window(col_off=0, row_off=0, width=1024, height=1024)
+        assert all(window.col_off >= 0 and window.row_off >= 0 for window in windows)
+        assert all(window.col_off + window.width <= 1024 for window in windows)
+        assert all(window.row_off + window.height <= 1024 for window in windows)
+
+    def test_window_generation_rejects_non_intersecting_roi(self):
+        processor = PlanetaryTileProcessor(tile_size=1024, overlap=128)
+
+        with pytest.raises(ValueError, match="does not intersect"):
+            list(processor.generate_windows((2000, 2000, 2100, 2100), (1024, 1024)))
+
     def test_seam_deduplication(self):
         """Verifies spatial NMS deduplicates redundant tie points along tile boundaries."""
         processor = PlanetaryTileProcessor(tile_size=1024, overlap=128, dedup_radius_px=4.0)

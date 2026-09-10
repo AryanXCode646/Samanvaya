@@ -9,7 +9,7 @@ Features:
 - Quantitative registration metrics (RMSE, inlier ratio, residuals).
 - Spatial distribution Shannon entropy and coverage scores.
 - Embedded matplotlib residual error histogram and vector scatter.
-- Official "ISRO SIH Compliance Certification Stamp" (Sub-pixel RMSE < 0.40 px).
+- Observed reprojection metrics compared with the SIH reference threshold; not an official certification.
 """
 
 from __future__ import annotations
@@ -217,13 +217,15 @@ class MissionReportGenerator:
         inliers_cnt = getattr(metrics, "num_inliers", getattr(metrics, "inlier_count", 0))
         matches_cnt = getattr(metrics, "num_initial_matches", getattr(metrics, "total_matches", inliers_cnt))
 
+        ground_truth_available = bool(getattr(metrics, "ground_truth_available", False))
+        assessment = lambda passes: ("PASS" if passes else "FAIL") if ground_truth_available else "NOT ASSESSED"
         metrics_data = [
             ["Metric Description", "Observed Value", "ISRO SIH Mandate", "Compliance Status"],
-            ["Geometric Root Mean Square Error (RMSE)", f"{metrics.rmse_pixels:.4f} pixels", "< 0.40 pixels", "PASS" if metrics.rmse_pixels < 0.40 else "FAIL"],
-            ["Mean Residual Displacement", f"{metrics.mean_residual_pixels:.4f} pixels", "< 0.50 pixels", "PASS" if metrics.mean_residual_pixels < 0.50 else "WARNING"],
-            ["Maximum Residual Outlier", f"{metrics.max_residual_pixels:.4f} pixels", "< 1.50 pixels", "PASS" if metrics.max_residual_pixels < 1.50 else "WARNING"],
-            ["Verified Inlier Tie-Points", f"{inliers_cnt} / {matches_cnt}", ">= 4 Inliers", "PASS" if inliers_cnt >= 4 else "FAIL"],
-            ["Inlier Consensus Ratio", f"{metrics.inlier_ratio * 100:.1f}%", ">= 40.0%", "PASS" if metrics.inlier_ratio >= 0.40 else "ACCEPTABLE"],
+            ["Geometric Root Mean Square Error (RMSE)", f"{metrics.rmse_pixels:.4f} pixels", "< 0.40 pixels", assessment(metrics.rmse_pixels < 0.40)],
+            ["Mean Residual Displacement", f"{metrics.mean_residual_pixels:.4f} pixels", "< 0.50 pixels", assessment(metrics.mean_residual_pixels < 0.50)],
+            ["Maximum Residual Outlier", f"{metrics.max_residual_pixels:.4f} pixels", "< 1.50 pixels", assessment(metrics.max_residual_pixels < 1.50)],
+            ["Verified Inlier Tie-Points", f"{inliers_cnt} / {matches_cnt}", ">= 4 Inliers", assessment(inliers_cnt >= 4)],
+            ["Inlier Consensus Ratio", f"{metrics.inlier_ratio * 100:.1f}%", ">= 40.0%", assessment(metrics.inlier_ratio >= 0.40)],
             ["Spatial Distribution Shannon Entropy", f"{entropy_val:.4f}", ">= 0.70 (Uniform)", "OPTIMAL" if entropy_val >= 0.70 else "NOMINAL"],
             ["Spatial Convex Hull Coverage", f"{coverage_val:.4f}", ">= 0.50 Frame Coverage", "OPTIMAL" if coverage_val >= 0.50 else "NOMINAL"],
             ["End-to-End Processing Latency", f"{metrics.processing_time_ms:.1f} ms", "Real-Time Scalable", "NOMINAL"],

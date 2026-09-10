@@ -6,6 +6,8 @@ ISRO Chandrayaan-2 Lunar Optical Image Registration Framework (SIH PS 26166).
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -74,16 +76,20 @@ def cmd_align(args: argparse.Namespace) -> None:
     if not matcher.is_pretrained:
         print("WARNING: LoFTR pretrained weights unavailable; results are not meaningful.")
 
-    inliers, H, warped = matcher.match(
+    match_result = matcher.match(
         source_image=raster_src.data,
         reference_image=raster_ref.data,
     )
+    inliers = match_result.inliers
+    H = match_result.homography
+    warped = match_result.warped_source
 
-    print(f"🎯 Discovered {len(inliers)} verified inliers.")
+    total_matches = len(match_result.all_matches)
+    print(f"🎯 Discovered {total_matches} raw matches and {len(inliers)} verified inliers.")
 
     # Generate Report
     report = EvaluationEngine.generate_report(
-        total_matches=len(inliers) * 2,  # approx
+        total_matches=total_matches,
         inliers=inliers,
         image_shape=raster_ref.data.shape,
         homography=H,
@@ -135,7 +141,10 @@ def cmd_align(args: argparse.Namespace) -> None:
     print("\n" + "=" * 50)
     print("📊 SAMANVAYA MISSION KPI SUMMARY")
     print("=" * 50)
-    print(f"  Sub-Pixel RMSE : {report.rmse_pixels:.4f} px (ISRO Mandate < 0.40 px: {'PASSED ✅' if report.meets_isro_mandate else 'NEEDS REVIEW ⚠️'})")
+    assessment = "NOT ASSESSED (reprojection consensus; no ground truth)"
+    if report.ground_truth_available:
+        assessment = "PASSED ✅" if report.meets_isro_mandate else "NEEDS REVIEW ⚠️"
+    print(f"  Reprojection RMSE: {report.rmse_pixels:.4f} px (ground-truth mandate: {assessment})")
     print(f"  Inlier Count   : {report.inlier_count} verified tie-points")
     print(f"  Inlier Ratio   : {report.inlier_ratio_percent:.2f}%")
     print(f"  Spatial Entropy: {report.spatial_uniformity_entropy:.4f} / 1.0 (Non-clumping score)")
@@ -165,10 +174,154 @@ def cmd_info(args: argparse.Namespace) -> None:
     print("  • Vectorized Log-Gabor Phase Congruency (Zero-DC Illumination Invariance)")
     print("  • O(1) Parabolic Taylor Sub-pixel Refinement (Strict Negative-Definite Hessian)")
     print("  • Out-of-Core Windowed Tiling for Gigapixel GeoTIFFs")
-    print("  • 3-Step Hyperspectral Cascade Bridge (OHRC 0.25m -> TMC-2 5m -> IIRS 80m)")
+    print("  • Mission metadata views for OHRC, TMC-2, IIRS, LRO NAC, and SELENE TC")
     print("  • USGS ISIS3 Jigsaw GCP Exporter with Curvature Covariance")
     print("  • Classical RIFT Phase-Congruency Matcher & LoFTR Dense Matcher")
     print("  • Interactive Streamlit application (streamlit run app.py)")
+
+
+def cmd_catalog_scan(args: argparse.Namespace) -> None:
+    """Scan mission products without loading their pixel arrays."""
+    from lunar_core.data_io.mission_catalog import scan, write_csv
+
+    products = scan(Path(args.root))
+    output = Path(args.output)
+    write_csv(products, output)
+    invalid = [product for product in products if product.status != "validated"]
+    print(f"Cataloged {len(products)} products to {output}")
+    if invalid:
+        print(f"Invalid products: {len(invalid)}")
+        for product in invalid:
+            print(f"  - {product.image_path}: {product.validation_message}")
+        raise SystemExit(1)
+
+
+def cmd_catalog_show(args: argparse.Namespace) -> None:
+    """Display one catalog manifest as JSON."""
+    manifest = Path(args.manifest)
+    if not manifest.is_file():
+        raise FileNotFoundError(f"Catalog manifest does not exist: {manifest}")
+    with manifest.open(newline="", encoding="utf-8") as stream:
+        print(json.dumps(list(csv.DictReader(stream)), indent=2))
+
+
+def _read_manifest(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Catalog manifest does not exist: {path}")
+    with path.open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def cmd_pair_discover(args: argparse.Namespace) -> None:
+    """Report conservative candidate pairs from a catalog manifest."""
+    from lunar_core.data_io.mission_product import MissionProduct
+    from lunar_core.data_io.pair_selector import propose_pair
+
+    rows = _read_manifest(Path(args.manifest))
+    products = []
+    for row in rows:
+        if row.get("status") != "validated":
+            continue
+        products.append(
+            MissionProduct(
+                mission=row.get("mission") or None,
+                instrument=row.get("instrument") or None,
+                product_id=row["product_id"],
+                image_path=Path(row["image_path"]),
+                gsd_m=float(row["gsd_m"]) if row.get("gsd_m") else None,
+                center_lat_deg=float(row["center_lat_deg"]) if row.get("center_lat_deg") else None,
+                center_lon_deg=float(row["center_lon_deg"]) if row.get("center_lon_deg") else None,
+                status=row["status"],
+            )
+        )
+    if args.mission:
+        products = [product for product in products if product.mission == args.mission]
+    candidates = [
+        propose_pair(source, target).to_dict()
+        for index, source in enumerate(products)
+        for target in products[index + 1 :]
+        if source.product_id != target.product_id
+    ]
+    selected = [
+        pair
+        for pair in candidates
+        if pair["status"] in {"confirmed_overlap", "proximity_candidate"}
+    ]
+    print(json.dumps(selected if args.candidates_only else candidates, indent=2))
+
+
+def cmd_register(args: argparse.Namespace) -> None:
+    """Register a mission-product pair through the importable API when real files exist.
+
+    Preserve legacy CLI compatibility for placeholder inputs used by tests and generic
+    workflow wrappers by falling back to the subprocess delegation path when the actual
+    source/target files are not available.
+    """
+    from scripts.register_real_pair import register_pair
+
+    raw_dir = Path(args.raw_dir).expanduser().resolve()
+    source_exists = bool(args.source) and Path(args.source).expanduser().exists()
+    target_exists = bool(args.target) and Path(args.target).expanduser().exists()
+    if source_exists or target_exists or raw_dir.exists():
+        try:
+            exit_code = register_pair(
+                raw_dir=args.raw_dir,
+                output_dir=args.output_dir,
+                source=args.source,
+                target=args.target,
+                site=args.site,
+            )
+        except Exception as exc:  # pragma: no cover - CLI failure path
+            print(f"ERROR: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        raise SystemExit(exit_code)
+
+    runner = _PROJECT_ROOT / "scripts" / "register_real_pair.py"
+    command = [
+        sys.executable,
+        str(runner),
+        "--raw-dir",
+        args.raw_dir,
+        "--output-dir",
+        args.output_dir,
+        "--source",
+        args.source,
+        "--target",
+        args.target,
+        "--site",
+        args.site,
+    ]
+    result = subprocess.run(command)
+    raise SystemExit(result.returncode)
+
+
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    """Display a previously generated evaluation report without recomputing it."""
+    report = Path(args.report)
+    if not report.is_file():
+        raise FileNotFoundError(f"Evaluation report does not exist: {report}")
+    print(report.read_text(encoding="utf-8"))
+
+
+def cmd_validation_summary(args: argparse.Namespace) -> None:
+    """Print a conservative validation summary derived from the evidence manifest."""
+    from lunar_core.validation import summarize_validation_evidence
+
+    manifest = Path(args.manifest)
+    if not manifest.is_file():
+        raise FileNotFoundError(f"Validation manifest does not exist: {manifest}")
+
+    summary = summarize_validation_evidence(manifest)
+    if args.json:
+        print(json.dumps(summary, indent=2))
+        return
+
+    print("Scientific validation summary")
+    print(f"Validation scope: {summary['validation_scope']}")
+    print(f"Real image validation status: {summary['real_image_validation_status']}")
+    print(f"Merge-readiness scope: {summary['merge_readiness_scope']}")
+    for pair, row in summary["validation_matrix"].items():
+        print(f"- {pair}: ingestion={row['ingestion']}; registration={row['registration']}; gt={row['ground_truth']}; status={row['status']}")
 
 
 def main() -> None:
@@ -199,6 +352,46 @@ def main() -> None:
     p_align.add_argument("--cap", type=int, default=4, help="ANMS equal cap per 8x8 cell")
     p_align.add_argument("--reproj-threshold", type=float, default=1.5, help="USAC-MAGSAC reprojection threshold")
     p_align.set_defaults(func=cmd_align)
+
+    # samanvaya catalog scan
+    p_catalog = subparsers.add_parser("catalog", help="Discover mission products and metadata")
+    catalog_commands = p_catalog.add_subparsers(dest="catalog_command", required=True)
+    p_catalog_scan = catalog_commands.add_parser("scan", help="Scan a raw mission-data directory")
+    p_catalog_scan.add_argument("root", help="Directory containing downloaded mission products")
+    p_catalog_scan.add_argument("--output", default="data/metadata/products.csv", help="CSV manifest output path")
+    p_catalog_scan.set_defaults(func=cmd_catalog_scan)
+    p_catalog_show = catalog_commands.add_parser("show", help="Display a CSV catalog manifest")
+    p_catalog_show.add_argument("manifest", help="CSV manifest path")
+    p_catalog_show.set_defaults(func=cmd_catalog_show)
+
+    # samanvaya pair discover
+    p_pair = subparsers.add_parser("pair", help="Discover metadata-supported product pairs")
+    pair_commands = p_pair.add_subparsers(dest="pair_command", required=True)
+    p_pair_discover = pair_commands.add_parser("discover", help="Discover candidate pairs from a catalog")
+    p_pair_discover.add_argument("--manifest", default="data/metadata/products.csv")
+    p_pair_discover.add_argument("--mission", help="Restrict candidates to one mission")
+    p_pair_discover.add_argument("--candidates-only", action="store_true")
+    p_pair_discover.set_defaults(func=cmd_pair_discover)
+
+    # samanvaya register
+    p_register = subparsers.add_parser("register", help="Register a supplied mission-product pair")
+    p_register.add_argument("--source", required=True, help="Source mission product filename or path")
+    p_register.add_argument("--target", required=True, help="Target mission product filename or path")
+    p_register.add_argument("--raw-dir", default="data/real/raw")
+    p_register.add_argument("--output-dir", default="data/real/results")
+    p_register.add_argument("--site", default="unspecified")
+    p_register.set_defaults(func=cmd_register)
+
+    # samanvaya evaluate
+    p_evaluate = subparsers.add_parser("evaluate", help="Display a generated evaluation report")
+    p_evaluate.add_argument("--report", required=True, help="Path to evaluation_report.json")
+    p_evaluate.set_defaults(func=cmd_evaluate)
+
+    # samanvaya validation
+    p_validation = subparsers.add_parser("validation", help="Display the evidence-backed scientific validation summary")
+    p_validation.add_argument("--manifest", default="evidence/real_data_manifest.json", help="Path to the validation manifest")
+    p_validation.add_argument("--json", action="store_true", help="Emit JSON instead of a human-readable summary")
+    p_validation.set_defaults(func=cmd_validation_summary)
 
     # samanvaya info
     p_info = subparsers.add_parser("info", help="Display system and mission configuration")

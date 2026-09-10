@@ -2,9 +2,37 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
+
+
+@dataclass
+class SpectralCube:
+    """Bands-first spectral cube with deterministic 2-D representations."""
+
+    data: np.ndarray
+    fill_value: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.data.ndim != 3:
+            raise ValueError(f"SpectralCube expects (bands, height, width), got {self.data.shape}")
+
+    @property
+    def shape(self) -> tuple[int, int, int]:
+        return tuple(int(value) for value in self.data.shape)
+
+    def to_image(self, method: str = "band_mean", components: int = 1) -> np.ndarray:
+        selector = HyperspectralBandSelector(wavelengths=np.arange(self.shape[0], dtype=np.float32))
+        if method == "band_mean":
+            image = np.nanmean(np.asarray(self.data, dtype=np.float32), axis=0)
+            return np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        if method == "pca":
+            if components != 1:
+                raise ValueError("The registration representation currently supports exactly one PCA component")
+            return selector.extract_pca_structural_band(np.asarray(self.data), normalize=False)
+        raise ValueError(f"Unsupported spectral representation: {method}")
 
 
 class HyperspectralBandSelector:

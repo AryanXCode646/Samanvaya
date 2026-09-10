@@ -48,6 +48,8 @@ class RegistrationEvaluationReport:
     homography_matrix: Optional[List[List[float]]] = None
     tie_points: List[Dict[str, Any]] = field(default_factory=list)
     image_shape: Tuple[int, int] = (0, 0)
+    ground_truth_available: bool = False
+    metric_basis: str = "reprojection_consensus"
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
@@ -77,6 +79,7 @@ class RegistrationEvaluationReport:
             mean_residual_pixels=self.mean_residual_pixels,
             max_residual_pixels=self.max_residual_pixels,
             processing_time_ms=self.processing_time_ms,
+            ground_truth_available=self.ground_truth_available,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -86,7 +89,9 @@ class RegistrationEvaluationReport:
                 "mission": "ISRO Chandrayaan-2 Planetary Remote Sensing",
                 "problem_statement": "SIH PS 26166",
                 "timestamp_utc": self.timestamp,
-                "framework": "lunar_core v1.0.0",
+                "framework": "lunar_core research build",
+                "metric_basis": self.metric_basis,
+                "ground_truth_available": self.ground_truth_available,
             },
             "summary": {
                 "total_matches": self.total_matches,
@@ -101,6 +106,7 @@ class RegistrationEvaluationReport:
                 "std_residual_pixels": round(self.std_residual_pixels, 4),
                 "ce90_pixels": round(self.ce90_pixels, 4),
                 "meets_isro_mandate": self.meets_isro_mandate,
+                "mandate_assessment": "ground_truth" if self.ground_truth_available else "not_assessed",
                 "isro_mandate_threshold_px": 0.40,
                 "processing_time_ms": round(self.processing_time_ms, 2),
                 "image_shape_hw": list(self.image_shape),
@@ -388,9 +394,12 @@ class EvaluationEngine:
         image_shape: Tuple[int, int],
         homography: Optional[np.ndarray] = None,
         processing_time_ms: float = 0.0,
+        ground_truth_control_points: Optional[Tuple[np.ndarray, np.ndarray]] = None,
     ) -> RegistrationMetrics:
         """
         Computes standard RegistrationMetrics with backwards compatibility.
+        Scientific validation requires independent ground truth; no claim is made from
+        reprojection consensus alone.
         """
         report = cls.generate_report(
             total_matches=total_matches,
@@ -398,6 +407,7 @@ class EvaluationEngine:
             image_shape=image_shape,
             homography=homography,
             processing_time_ms=processing_time_ms,
+            ground_truth_control_points=ground_truth_control_points,
         )
         return report.metrics
 
@@ -417,6 +427,11 @@ class EvaluationEngine:
         inlier_count = len(inliers)
         inlier_ratio_pct = cls.compute_inlier_ratio(inlier_count, total_matches)
         control_point_rmse: Optional[float] = None
+        ground_truth_available = bool(
+            ground_truth_control_points is not None and
+            len(ground_truth_control_points[0]) > 0 and
+            len(ground_truth_control_points[1]) > 0
+        )
 
         if inlier_count >= 4:
             ref_pts = np.array([m.ref_xy for m in inliers], dtype=np.float64)
@@ -465,21 +480,32 @@ class EvaluationEngine:
                 })
 
             h_list = homography.tolist() if homography is not None else None
-            meets_mandate = bool(rmse < 0.40 and inlier_count >= 4)
 
-            # Evaluate against ground-truth control points if provided
-            if ground_truth_control_points is not None and homography is not None:
+            # Evaluate against ground-truth control points if provided.
+            # This is the authoritative scientific RMSE whenever GT is supplied, even if
+            # the inlier set is sparse or the final estimator produced a conservative fallback.
+            if ground_truth_available and homography is not None:
                 gt_ref, gt_src = ground_truth_control_points
                 if len(gt_ref) > 0:
                     cp_rmse, _, _ = cls.compute_projective_rmse(gt_ref, gt_src, homography)
                     control_point_rmse = float(cp_rmse)
+                    rmse = control_point_rmse
+
+            meets_mandate = bool(ground_truth_available and homography is not None and rmse < 0.40 and inlier_count >= 4)
         else:
             rmse, mean_res, median_res, max_res, std_res, ce90, entropy = (
                 999.0, 999.0, 999.0, 999.0, 0.0, 999.0, 0.0
             )
             tie_points = []
             h_list = None
-            meets_mandate = False
+
+            if ground_truth_available and ground_truth_control_points is not None:
+                gt_ref, gt_src = ground_truth_control_points
+                if len(gt_ref) > 0 and homography is not None:
+                    cp_rmse, _, _ = cls.compute_projective_rmse(gt_ref, gt_src, homography)
+                    control_point_rmse = float(cp_rmse)
+                    rmse = control_point_rmse
+            meets_mandate = bool(ground_truth_available and homography is not None and rmse < 0.40 and inlier_count >= 4)
 
         return RegistrationEvaluationReport(
             total_matches=total_matches,
@@ -498,6 +524,8 @@ class EvaluationEngine:
             homography_matrix=h_list,
             tie_points=tie_points,
             image_shape=image_shape,
+            ground_truth_available=ground_truth_available,
+            metric_basis="ground_truth_control_points" if ground_truth_available else "reprojection_consensus",
         )
 
 
@@ -581,7 +609,7 @@ def run_real_evaluation_benchmark(
     import logging
     import time
     logger = logging.getLogger("samanvaya.metrics")
-    logger.info("Running Samanvaya Real Raster Evaluation Benchmark on bundled mission datasets...")
+    logger.info("Running Samanvaya bundled benchmark evaluation on calibrated raster datasets...")
 
     from lunar_core.pipeline import LunarCorePipeline
     from lunar_core.models import SunAngles

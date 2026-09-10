@@ -1,18 +1,30 @@
-"""Register a downloaded Chandrayaan-2/LRO NAC raster pair."""
+"""Register a downloaded mission-product raster pair."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import time
+from datetime import datetime, timezone
+from importlib.metadata import version as package_version, PackageNotFoundError
 from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
 
 from lunar_core.data_io import PlanetaryRasterReader, PlanetaryTileProcessor
+from lunar_core.data_io.mission_catalog import inspect_product, resolve_product_label
 from lunar_core.evaluation.metrics import EvaluationEngine
 from lunar_core.models import GeoRaster, SensorModality, SunAngles
 from lunar_core.pipeline import LunarCorePipeline
+
+
+def _software_version() -> str:
+    try:
+        return package_version("samanvaya")
+    except PackageNotFoundError:
+        return "uninstalled-source-tree"
 
 IMAGE_SUFFIXES = {".tif", ".tiff", ".img"}
 
@@ -21,8 +33,8 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1].lower()
 
 
-def read_pds4_image(image_path: Path, label_path: Path) -> np.ndarray:
-    """Read a common detached PDS4 2-D image using its label metadata."""
+def _pds4_layout(image_path: Path, label_path: Path) -> tuple[int, int, int, np.dtype]:
+    """Read the supported detached PDS4 2-D layout without allocating pixels."""
     try:
         from defusedxml import ElementTree
         root = ElementTree.parse(label_path).getroot()
@@ -64,13 +76,24 @@ def read_pds4_image(image_path: Path, label_path: Path) -> np.ndarray:
     else:
         raise ValueError(f"Unsupported PDS4 sample width/type: {bits} bits, {data_type}")
 
-    count = lines * samples
-    with image_path.open("rb") as stream:
-        stream.seek(file_offset)
-        data = np.fromfile(stream, dtype=dtype, count=count)
-    if data.size != count:
-        raise ValueError(f"PDS4 image is truncated: expected {count} samples, found {data.size}")
-    return data.reshape((lines, samples)).astype(np.float32)
+    expected_bytes = file_offset + lines * samples * dtype.itemsize
+    if image_path.stat().st_size < expected_bytes:
+        raise ValueError(
+            f"PDS4 image is truncated: expected at least {expected_bytes} bytes, found {image_path.stat().st_size}"
+        )
+    return lines, samples, file_offset, dtype
+
+
+def open_pds4_memmap(image_path: Path, label_path: Path) -> np.memmap:
+    """Open a detached 2-D PDS4 image lazily for windowed processing."""
+    lines, samples, file_offset, dtype = _pds4_layout(image_path, label_path)
+    return np.memmap(image_path, dtype=dtype, mode="r", offset=file_offset, shape=(lines, samples), order="C")
+
+
+def read_pds4_image(image_path: Path, label_path: Path) -> np.ndarray:
+    """Read a common detached PDS4 2-D image using its label metadata."""
+    data = np.asarray(open_pds4_memmap(image_path, label_path))
+    return data.astype(np.float32)
 
 
 def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
@@ -83,8 +106,6 @@ def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
         path for path in raw_dir.iterdir()
         if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
     )
-    tokens = ("ohrc", "tmc", "ch2") if role == "Chandrayaan-2" else ("lro", "nac")
-    candidates = [path for path in candidates if any(token in path.name.lower() for token in tokens)]
     if len(candidates) != 1:
         names = ", ".join(path.name for path in candidates) or "none"
         raise RuntimeError(f"Expected exactly one {role} image in {raw_dir}; found: {names}. Use an explicit path.")
@@ -92,11 +113,12 @@ def find_product(raw_dir: Path, requested: Optional[str], role: str) -> Path:
 
 
 def product_metadata(image_path: Path) -> Tuple[float, Optional[SunAngles]]:
-    labels = sorted(image_path.parent.glob("*.xml"))
-    label = next((path for path in labels if image_path.stem.lower() in path.stem.lower()), labels[0] if labels else None)
-    if label is None:
+    resolution = resolve_product_label(image_path)
+    if not resolution.resolved or resolution.path is None:
         return 1.0, None
-    sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(label, allowed_dir=image_path.parent)
+    sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
+        resolution.path, allowed_dir=image_path.parent
+    )
     return gsd, sun if modality != SensorModality.SYNTHETIC else None
 
 
@@ -133,10 +155,12 @@ def read_product(image_path: Path, modality: SensorModality) -> Tuple[GeoRaster,
     gsd, sun = product_metadata(image_path)
     try:
         if image_path.suffix.lower() == ".img":
-            labels = sorted(image_path.parent.glob("*.xml"))
-            label = next((path for path in labels if image_path.stem.lower() in path.stem.lower()), None)
-            if label is None:
-                raise FileNotFoundError(f"No PDS4 XML label found for {image_path.name}")
+            resolution = resolve_product_label(image_path)
+            if not resolution.resolved or resolution.path is None:
+                raise FileNotFoundError(
+                    resolution.message or f"No PDS4 XML label found for {image_path.name}"
+                )
+            label = resolution.path
             data = read_pds4_image(image_path, label)
             raster = GeoRaster(data=data, modality=modality, gsd_meters=gsd, sun_angles=sun)
         else:
@@ -166,58 +190,232 @@ def read_product(image_path: Path, modality: SensorModality) -> Tuple[GeoRaster,
     ), masked_count
 
 
-def run(args: argparse.Namespace) -> None:
-    raw_dir = Path(args.raw_dir).expanduser().resolve()
-    output_dir = Path(args.output_dir).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    ch2_path = find_product(raw_dir, args.chandrayaan, "Chandrayaan-2")
-    lro_path = find_product(raw_dir, args.lro, "LRO NAC")
-    ch2, ch2_masked = read_product(ch2_path, SensorModality.OHRC)
-    lro, lro_masked = read_product(lro_path, SensorModality.LRO_NAC)
+def _modality_for_product(product) -> SensorModality:
+    instrument = (product.instrument or "").upper()
+    mapping = {
+        "OHRC": SensorModality.OHRC,
+        "TMC-2": SensorModality.TMC2,
+        "IIRS": SensorModality.IIRS,
+        "NAC": SensorModality.LRO_NAC,
+        "LROC": SensorModality.LRO_NAC,
+        "TC": SensorModality.SYNTHETIC,
+    }
+    return mapping.get(instrument, SensorModality.SYNTHETIC)
 
-    if max(ch2.shape + lro.shape) >= args.tile_threshold:
-        tiled = PlanetaryTileProcessor(tile_size=args.tile_size, overlap=args.overlap)
-        tiled_result = tiled.process(ch2.data, lro.data, estimate_coarse_overlap=False)
+
+def _sun_angles_for_product(product) -> Optional[SunAngles]:
+    if product.sun_azimuth_deg is None or product.sun_elevation_deg is None:
+        return None
+    return SunAngles(
+        azimuth_deg=product.sun_azimuth_deg,
+        elevation_deg=product.sun_elevation_deg,
+    )
+
+
+def _load_ground_truth_control_points(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load a checked-in control-point JSON payload for scientific validation."""
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"Ground-truth control-point file not found: {resolved}")
+    payload = json.loads(resolved.read_text(encoding="utf-8"))
+    source_points = payload.get("source_points") or payload.get("src_points") or payload.get("source")
+    target_points = payload.get("target_points") or payload.get("ref_points") or payload.get("target")
+    if source_points is None or target_points is None:
+        raise ValueError(
+            "Ground-truth JSON must include exactly one source_points/target_points pair "
+            "or source/target point arrays."
+        )
+    src = np.asarray(source_points, dtype=np.float64)
+    tgt = np.asarray(target_points, dtype=np.float64)
+    if src.shape != tgt.shape or src.ndim != 2 or src.shape[1] != 2:
+        raise ValueError("Ground-truth control points must be a 2D array of shape (N, 2).")
+    if len(src) < 4:
+        raise ValueError("Ground-truth control points require at least 4 point pairs for scientific validation.")
+    return src, tgt
+
+
+def register_pair(
+    raw_dir: str | Path = "data/real/raw",
+    output_dir: str | Path = "data/real/results",
+    source: Optional[str] = None,
+    target: Optional[str] = None,
+    site: str = "unspecified",
+    ground_truth: Optional[str | Path] = None,
+    tile_threshold: int = 4096,
+    tile_size: int = 1024,
+    overlap: int = 128,
+) -> int:
+    started_at = datetime.now(timezone.utc).isoformat()
+    started = time.perf_counter()
+    raw_dir = Path(raw_dir).expanduser().resolve()
+    output_dir = Path(output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    source_path = find_product(raw_dir, source, "source")
+    target_path = find_product(raw_dir, target, "target")
+    source_product = inspect_product(source_path, root_dir=source_path.parent)
+    target_product = inspect_product(target_path, root_dir=target_path.parent)
+    source_modality = _modality_for_product(source_product)
+    target_modality = _modality_for_product(target_product)
+    if source_modality == SensorModality.IIRS and (source_product.band_count or 0) > 1:
+        raise RuntimeError("IIRS spectral cubes are catalog-aware but not yet supported by the 2-D registration runner.")
+    if target_modality == SensorModality.IIRS and (target_product.band_count or 0) > 1:
+        raise RuntimeError("IIRS spectral cubes are catalog-aware but not yet supported by the 2-D registration runner.")
+    source_large_geotiff = source_path.suffix.lower() in {".tif", ".tiff"} and max(
+        source_product.height or 0, source_product.width or 0
+    ) >= tile_threshold
+    target_large_geotiff = target_path.suffix.lower() in {".tif", ".tiff"} and max(
+        target_product.height or 0, target_product.width or 0
+    ) >= tile_threshold
+    source_large_pds = source_path.suffix.lower() == ".img" and max(
+        source_product.height or 0, source_product.width or 0
+    ) >= tile_threshold
+    target_large_pds = target_path.suffix.lower() == ".img" and max(
+        target_product.height or 0, target_product.width or 0
+    ) >= tile_threshold
+
+    source = target = None
+    source_masked = target_masked = 0
+    source_gsd = source_product.gsd_m or 1.0
+    target_gsd = target_product.gsd_m or 1.0
+    source_sun = _sun_angles_for_product(source_product)
+    target_sun = _sun_angles_for_product(target_product)
+    source_shape = (source_product.height or 0, source_product.width or 0)
+    target_shape = (target_product.height or 0, target_product.width or 0)
+
+    both_window_readable = source_path.suffix.lower() in {".tif", ".tiff", ".img"} and target_path.suffix.lower() in {".tif", ".tiff", ".img"}
+    if both_window_readable and (source_large_geotiff or target_large_geotiff or source_large_pds or target_large_pds):
+        source_input = source_path
+        target_input = target_path
+        if source_path.suffix.lower() == ".img":
+            source_label = resolve_product_label(source_path)
+            if not source_label.resolved or source_label.path is None:
+                raise FileNotFoundError(source_label.message or f"No PDS4 XML label for {source_path.name}")
+            source_input = open_pds4_memmap(source_path, source_label.path)
+        if target_path.suffix.lower() == ".img":
+            target_label = resolve_product_label(target_path)
+            if not target_label.resolved or target_label.path is None:
+                raise FileNotFoundError(target_label.message or f"No PDS4 XML label for {target_path.name}")
+            target_input = open_pds4_memmap(target_path, target_label.path)
+        tiled = PlanetaryTileProcessor(tile_size=tile_size, overlap=overlap)
+        tiled_result = tiled.process(source_input, target_input, estimate_coarse_overlap=False)
         total_matches = tiled_result.metrics.total_matches
         inliers = tiled_result.global_inliers
         matrix = tiled_result.global_homography
-        matcher_path = "dense_loftr_or_classical_rift_per_tile"
+        matcher_path = "dense_loftr_or_classical_rift_per_tile_from_paths"
         processing_time_ms = tiled_result.processing_time_s * 1000.0
     else:
+        source, source_masked = read_product(source_path, source_modality)
+        target, target_masked = read_product(target_path, target_modality)
+        source_gsd, target_gsd = source.gsd_meters, target.gsd_meters
+        source_sun, target_sun = source.sun_angles, target.sun_angles
+        source_shape, target_shape = source.shape, target.shape
         result = LunarCorePipeline().register(
-            ref_image=lro.data, target_image=ch2.data,
-            ref_sun=lro.sun_angles, target_sun=ch2.sun_angles,
-            ref_gsd=lro.gsd_meters, target_gsd=ch2.gsd_meters,
+            ref_image=target.data, target_image=source.data,
+            ref_sun=target_sun, target_sun=source_sun,
+            ref_gsd=target_gsd, target_gsd=source_gsd,
         )
         total_matches, inliers, matrix = len(result.matches), result.inliers, result.transform_matrix
         matcher_path, processing_time_ms = result.matcher_path, result.metrics.processing_time_ms
 
+    ground_truth_points = None
+    if ground_truth is not None:
+        ground_truth_points = _load_ground_truth_control_points(ground_truth)
+
     report = EvaluationEngine.generate_report(
-        total_matches=total_matches, inliers=inliers, homography=matrix,
-        image_shape=lro.shape, processing_time_ms=processing_time_ms,
+        total_matches=total_matches,
+        inliers=inliers,
+        homography=matrix,
+        image_shape=target_shape,
+        processing_time_ms=processing_time_ms,
+        ground_truth_control_points=ground_truth_points,
     )
     report.export_json(output_dir / "evaluation_report.json")
     report.export_csv(output_dir / "evaluation_report.csv")
-    print(f"Site: {args.site}")
-    print(f"Chandrayaan-2: {ch2_path.name} ({ch2.shape}, {ch2.gsd_meters:g} m/px)")
-    print(f"LRO NAC: {lro_path.name} ({lro.shape}, {lro.gsd_meters:g} m/px)")
-    print(f"Masked nodata pixels: Chandrayaan-2={ch2_masked}, LRO NAC={lro_masked}")
+    provenance = {
+        "dataset_class": "real_mission_data",
+        "source": {
+            "mission": source_product.mission,
+            "instrument": source_product.instrument or source_modality.value,
+            "product_id": source_product.product_id or source_path.stem,
+            "file": str(source_path),
+            "label": str(source_product.label_path) if source_product.label_path else None,
+            "gsd_m": source_gsd,
+            "sun_azimuth_deg": source_sun.azimuth_deg if source_sun else None,
+            "sun_elevation_deg": source_sun.elevation_deg if source_sun else None,
+            "masked_pixels": source_masked,
+        },
+        "target": {
+            "mission": target_product.mission,
+            "instrument": target_product.instrument or target_modality.value,
+            "product_id": target_product.product_id or target_path.stem,
+            "file": str(target_path),
+            "label": str(target_product.label_path) if target_product.label_path else None,
+            "gsd_m": target_gsd,
+            "sun_azimuth_deg": target_sun.azimuth_deg if target_sun else None,
+            "sun_elevation_deg": target_sun.elevation_deg if target_sun else None,
+            "masked_pixels": target_masked,
+        },
+        "pipeline": {
+            "matcher": matcher_path,
+            "fallback_used": "rift" in matcher_path.lower(),
+            "photometric_correction": "enabled",
+            "tile_threshold": tile_threshold,
+            "tile_size": tile_size,
+            "overlap": overlap,
+            "software_version": _software_version(),
+        },
+        "execution": {
+            "timestamp_utc": started_at,
+            "runtime_seconds": time.perf_counter() - started,
+            "real_rmse_pixels": report.rmse_pixels,
+            "inlier_count": report.inlier_count,
+            "ground_truth_available": bool(report.ground_truth_available),
+            "control_point_file": str(Path(ground_truth).expanduser().resolve()) if ground_truth is not None else None,
+            "metric_note": (
+                "Ground-truth control points supplied; scientific RMSE is based on independent control points."
+                if report.ground_truth_available
+                else "Reprojection/consensus metric; no independent ground truth supplied."
+            ),
+        },
+    }
+    (output_dir / "provenance.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
+    print(f"Site: {site}")
+    print(f"Source: {source_path.name} ({source_shape}, {source_gsd:g} m/px)")
+    print(f"Target: {target_path.name} ({target_shape}, {target_gsd:g} m/px)")
+    print(f"Masked nodata pixels: source={source_masked}, target={target_masked}")
     print(f"Matcher path: {matcher_path}")
     print(f"RMSE: {report.rmse_pixels:.4f} px; inliers: {report.inlier_count}")
     print(f"Reports: {output_dir / 'evaluation_report.json'}, {output_dir / 'evaluation_report.csv'}")
+    print(f"Provenance: {output_dir / 'provenance.json'}")
+    return 0
+
+
+def run(args: argparse.Namespace) -> int:
+    return register_pair(
+        raw_dir=args.raw_dir,
+        output_dir=args.output_dir,
+        source=args.source,
+        target=args.target,
+        site=args.site,
+        ground_truth=args.ground_truth,
+        tile_threshold=args.tile_threshold,
+        tile_size=args.tile_size,
+        overlap=args.overlap,
+    )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Register a real Chandrayaan-2/LRO NAC pair.")
+    parser = argparse.ArgumentParser(description="Register a mission-product source/target pair.")
     parser.add_argument("--raw-dir", default="data/real/raw")
     parser.add_argument("--output-dir", default="data/real/results")
-    parser.add_argument("--chandrayaan")
-    parser.add_argument("--lro")
+    parser.add_argument("--source", "--chandrayaan", dest="source")
+    parser.add_argument("--target", "--lro", dest="target")
+    parser.add_argument("--ground-truth", dest="ground_truth", default=None, help="Optional JSON file with source_points/target_points ground truth.")
     parser.add_argument("--site", default="unspecified")
     parser.add_argument("--tile-threshold", type=int, default=4096)
     parser.add_argument("--tile-size", type=int, default=1024)
     parser.add_argument("--overlap", type=int, default=128)
-    run(parser.parse_args())
+    raise SystemExit(run(parser.parse_args()))
 
 
 if __name__ == "__main__":

@@ -44,8 +44,62 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("🌙 ISRO Chandrayaan-2 Lunar Image Registration Portal")
-st.markdown("### SIH PS 26166: Multi-Modal (OHRC / TMC-2 / IIRS vs. LRO NAC), Sun-Angle & Scale-Invariant Alignment")
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(180deg, #07131d 0%, #0b1622 100%);
+    }
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 2rem;
+    }
+    .portal-shell {
+        background: rgba(14, 26, 37, 0.78);
+        border: 1px solid rgba(160, 204, 255, 0.22);
+        border-radius: 18px;
+        padding: 1.2rem 1.4rem;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(8px);
+    }
+    .metric-card {
+        background: linear-gradient(180deg, rgba(18, 36, 52, 0.92), rgba(11, 22, 34, 0.92));
+        border: 1px solid rgba(128, 167, 255, 0.3);
+        border-radius: 16px;
+        padding: 0.9rem 1rem;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.4rem 0.8rem;
+        border-radius: 999px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        background: rgba(104, 206, 145, 0.18);
+        border: 1px solid rgba(104, 206, 145, 0.55);
+        color: #d6ffe8;
+    }
+    .sidebar .block-container {
+        background: rgba(8, 16, 24, 0.96);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="portal-shell">
+        <h1 style="margin:0; font-size:2.2rem; color:#edf7ff;">🌙 ISRO Chandrayaan-2 Lunar Alignment Portal</h1>
+        <p style="margin:0.45rem 0 0; font-size:1.05rem; color:#b8d7f7;">
+            SIH PS 26166 · Multi-modal, sun-angle, and scale-invariant lunar registration
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # -----------------------------------------------------------------------------
 # Helper Functions: Image Loading, Sample Presets & Plotting
@@ -148,6 +202,62 @@ def load_uploaded_image(uploaded_file) -> np.ndarray:
         return np.clip((img - p_low) / denom, 0.0, 1.0).astype(np.float32)
 
 
+def render_launch_modal(selected_benchmark: str, selected_key: str, source_modality: str, ref_modality: str) -> None:
+    """Render a modal-style confirmation dialog before launch."""
+    if not hasattr(st, "dialog"):
+        if not st.session_state.get("show_launch_modal", False):
+            return
+        st.markdown(
+            """
+            <div style='position: fixed; inset: 0; background: rgba(5,10,15,0.72); z-index: 999; display: flex; align-items: center; justify-content: center;'>
+                <div style='width: min(620px, 92vw); background: rgba(14,23,33,0.98); border: 1px solid rgba(160,204,255,0.25); border-radius: 18px; padding: 1.5rem; box-shadow: 0 24px 80px rgba(0,0,0,0.45);'>
+                    <h3 style='margin:0 0 0.5rem; color:#eef8ff;'>Launch alignment</h3>
+                    <p style='margin:0 0 0.75rem; color:#c6ddf9;'>Selected benchmark: <strong>""" + selected_benchmark + """</strong></p>
+                    <div style='display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom: 1rem;'>
+                        <span style='padding:0.35rem 0.7rem; border-radius:999px; background: rgba(97,186,255,0.1); border:1px solid rgba(97,186,255,0.35); color:#d9f3ff;'>""" + source_modality + """ → """ + ref_modality + """</span>
+                        <span style='padding:0.35rem 0.7rem; border-radius:999px; background: rgba(76,201,140,0.1); border:1px solid rgba(76,201,140,0.35); color:#d7ffea;'>""" + selected_key + """</span>
+                    </div>
+                    <p style='margin:0; color:#dfeefc;'>This will run the full multi-modal alignment pipeline, including phase congruency, LoFTR matching, ANMS, and validation diagnostics.</p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_confirm, col_cancel = st.columns(2)
+        with col_confirm:
+            if st.button("Confirm & Run", type="primary", use_container_width=True):
+                st.session_state["show_launch_modal"] = False
+                st.session_state["launch_confirmed"] = True
+                st.rerun()
+        with col_cancel:
+            if st.button("Cancel", type="secondary", use_container_width=True):
+                st.session_state["show_launch_modal"] = False
+                st.session_state["launch_confirmed"] = False
+                st.rerun()
+        st.stop()
+        return
+
+    @st.dialog("Launch alignment pipeline")
+    def _modal():
+        st.markdown(f"**Selected benchmark:** {selected_benchmark}")
+        st.write(f"Source: {source_modality} → Reference: {ref_modality}")
+        st.write(f"Configuration: {selected_key}")
+        st.caption("This will run the full multi-modal alignment workflow, including solar normalization, phase congruency, dense matching, and scientific validation reporting.")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Confirm & Run", type="primary", use_container_width=True):
+                st.session_state["launch_confirmed"] = True
+                st.rerun()
+        with col_b:
+            if st.button("Cancel", type="secondary", use_container_width=True):
+                st.session_state["launch_confirmed"] = False
+                st.rerun()
+
+    if st.session_state.get("show_launch_modal", False):
+        _modal()
+
+
 def render_tie_point_correspondences(
     source_img: np.ndarray,
     reference_img: np.ndarray,
@@ -209,6 +319,22 @@ def render_tie_point_correspondences(
 # -----------------------------------------------------------------------------
 
 st.sidebar.header("🎯 Mission Evaluation Benchmark")
+if st.sidebar.button("🔄 Reset backend state", use_container_width=True):
+    for key in [
+        "result_report",
+        "inliers",
+        "raw_matches",
+        "homography",
+        "matcher_path",
+        "warped_source",
+        "img_source",
+        "img_ref",
+        "backend_trace",
+        "last_run_summary",
+    ]:
+        st.session_state.pop(key, None)
+    st.rerun()
+
 sample_manifest = load_sample_manifest()
 benchmarks = sample_manifest.get("benchmarks", {})
 
@@ -269,6 +395,13 @@ magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0
 # -----------------------------------------------------------------------------
 # Ingestion & Data Preparation
 # -----------------------------------------------------------------------------
+
+if "backend_trace" not in st.session_state:
+    st.session_state["backend_trace"] = [
+        "Status: ready",
+        "Backend: image ingestion and alignment pipeline idle",
+        "Next action: choose benchmark and run alignment",
+    ]
 
 img_source: Optional[np.ndarray] = None
 img_ref: Optional[np.ndarray] = None
@@ -359,14 +492,38 @@ if img_source is not None and img_ref is not None:
     run_alignment = col_btn.button("🚀 Execute Multi-Modal Alignment Pipeline", type="primary", use_container_width=True)
 
     if run_alignment:
+        st.session_state["show_launch_modal"] = True
+        st.session_state["launch_confirmed"] = False
+
+    render_launch_modal(selected_benchmark, selected_key, source_modality, ref_modality)
+
+    if st.session_state.get("launch_confirmed"):
+        st.session_state["launch_confirmed"] = False
+        st.session_state["show_launch_modal"] = False
+        st.session_state["backend_trace"] = [
+            "Status: running",
+            "Backend: initializing planetary registration engine",
+            "Stage: ingesting and normalizing source/reference imagery",
+        ]
+
         progress_bar = st.progress(0, text="Initializing planetary registration engine...")
 
         # Step 1: Preprocessing & GeoTIFF normalizations
         progress_bar.progress(15, text="Step 1/5: Ingesting & normalizing GeoTIFF dynamic ranges...")
+        st.session_state["backend_trace"] = [
+            "Status: running",
+            "Backend: image ingestion and dynamic-range normalization in progress",
+            "Stage: loading source/reference rasters and metadata",
+        ]
         time.sleep(0.1)
 
         # Step 2: Illumination-Invariant Log-Gabor Phase Congruency
         progress_bar.progress(35, text="Step 2/5: Vectorized 2D Log-Gabor Phase Congruency (PyTorch FFT)...")
+        st.session_state["backend_trace"] = [
+            "Status: running",
+            "Backend: computing illumination-invariant phase congruency maps",
+            "Stage: source/reference feature enhancement",
+        ]
         pc_engine = PhaseCongruencyEngine(num_scales=4, num_orientations=6)
         pc_src_input = img_source
         pc_ref_input = img_ref
@@ -381,6 +538,11 @@ if img_source is not None and img_ref is not None:
 
         # Step 3: Dense LoFTR Cross-Attention Matching
         progress_bar.progress(60, text="Step 3/5: Dense Keypoint Extraction via kornia.feature.LoFTR...")
+        st.session_state["backend_trace"] = [
+            "Status: running",
+            "Backend: dense matcher is extracting candidate correspondences",
+            "Stage: LoFTR / RIFT feature matching and ANMS filtering",
+        ]
         start_t = time.perf_counter()
         matcher = DenseLoFTRMatcher(
             pretrained="outdoor",
@@ -410,6 +572,11 @@ if img_source is not None and img_ref is not None:
 
         # Step 5: USAC-MAGSAC Homography & Warping
         progress_bar.progress(95, text="Step 5/5: USAC-MAGSAC++ Homography Estimation & Warping...")
+        st.session_state["backend_trace"] = [
+            "Status: running",
+            "Backend: filtering outliers and estimating alignment transform",
+            "Stage: robust MAGSAC homography and warping",
+        ]
         inliers, H, warped_source = matcher.filter_outliers_magsac(
             refined_matches, img_source, img_ref.shape
         )
@@ -437,10 +604,22 @@ if img_source is not None and img_ref is not None:
         )
 
         progress_bar.progress(100, text="Alignment Complete! Generated Hackathon Diagnostics.")
+        st.session_state["backend_trace"] = [
+            "Status: complete",
+            f"Backend: alignment finished in {elapsed_ms:.1f} ms",
+            f"Stage: validation summary -> RMSE {report.rmse_pixels:.4f}px, inliers {report.inlier_count}",
+        ]
+        st.session_state["last_run_summary"] = {
+            "matcher": matcher_path,
+            "rmse_px": float(report.rmse_pixels),
+            "inlier_count": int(report.inlier_count),
+            "ground_truth_available": bool(report.ground_truth_available),
+            "meets_isro_mandate": bool(report.meets_isro_mandate),
+            "processing_time_ms": float(report.processing_time_ms),
+        }
         time.sleep(0.2)
         progress_bar.empty()
 
-        # Cache in Streamlit session state
         st.session_state["result_report"] = report
         st.session_state["inliers"] = inliers
         st.session_state["raw_matches"] = raw_matches
@@ -453,6 +632,19 @@ if img_source is not None and img_ref is not None:
 # -----------------------------------------------------------------------------
 # Results Presentation: Scorecards, Plots & Blending
 # -----------------------------------------------------------------------------
+
+st.markdown("---")
+backend_trace = st.session_state.get("backend_trace", ["Status: ready", "Backend: idle", "Next action: choose benchmark and run alignment"])
+backend_status = backend_trace[0]
+
+status_container = st.container()
+with status_container:
+    st.markdown(
+        f"<div class='metric-card'><div class='status-badge'>{backend_status}</div>"
+        f"<div style='margin-top: 0.7rem; color: #d9ebff; font-size:1rem;'>"
+        f"<strong>Backend activity:</strong> {' · '.join(backend_trace[1:])}</div></div>",
+        unsafe_allow_html=True,
+    )
 
 if "result_report" in st.session_state:
     report: RegistrationEvaluationReport = st.session_state["result_report"]
@@ -484,10 +676,15 @@ if "result_report" in st.session_state:
     )
     col_k5.metric("Pipeline Latency", f"{report.processing_time_ms:.1f} ms")
 
-    if report.meets_isro_mandate:
-        st.success("🎯 **Synthetic benchmark threshold met**: Sub-pixel registration RMSE < 0.40 pixels for this run.")
+    if report.ground_truth_available and report.meets_isro_mandate:
+        st.success("🎯 **Independent ground-truth validation passed**: RMSE < 0.40 px and sufficient inliers were confirmed for this run.")
+    elif report.ground_truth_available:
+        st.warning("⚠️ Independent ground truth is available, but the run did not satisfy the validation threshold. Review the residuals and matcher configuration.")
     else:
-        st.warning("⚠️ Sub-pixel RMSE threshold (> 0.40 px) or inlier count requires refinement.")
+        st.warning("⚠️ This run is based on reprojection consensus only. No independent ground truth was supplied, so it cannot be claimed as scientific validation.")
+
+    st.subheader("🧠 Backend execution trace")
+    st.code("\n".join(backend_trace), language="text")
 
     # 4 Interactive Inspection Tabs
     tab_overlap, tab_tiepoints, tab_diagnostics, tab_exports = st.tabs([
@@ -621,3 +818,6 @@ if "result_report" in st.session_state:
                 mime="text/csv",
             )
             st.code("".join(gcp_csv_lines[:6]), language="csv")
+else:
+    st.info("The backend is idle. Choose a benchmark and run the alignment pipeline to populate live metrics and validation output.")
+    st.code("\n".join(backend_trace), language="text")

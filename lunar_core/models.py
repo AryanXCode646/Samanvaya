@@ -17,6 +17,7 @@ class SensorModality(str, Enum):
     TMC2_FORE = "CH2_TMC2_FORE"
     TMC2_AFT = "CH2_TMC2_AFT"
     IIRS = "IIRS"          # Chandrayaan-2 Imaging Infrared Spectrometer (~80m)
+    HYSI = "HYSI"          # Chandrayaan-1 Hyper Spectral Imager (~80m)
     LRO_NAC = "LRO_NAC"    # Lunar Reconnaissance Orbiter Narrow Angle Camera (~0.5m)
     SYNTHETIC = "SYNTHETIC"
 
@@ -102,6 +103,7 @@ class RegistrationMetrics:
     mean_residual_pixels: float = 0.0
     max_residual_pixels: float = 0.0
     processing_time_ms: float = 0.0
+    ground_truth_available: bool = False
 
     @property
     def inlier_ratio_percent(self) -> float:
@@ -110,8 +112,8 @@ class RegistrationMetrics:
 
     @property
     def meets_isro_mandate(self) -> bool:
-        """ISRO SIH PS 26166 mandate: Sub-pixel RMSE < 0.40 pixels with >= 4 inliers."""
-        return self.rmse_pixels < 0.40 and self.inlier_count >= 4
+        """Scientific validation requires independent ground truth, not reprojection consensus alone."""
+        return self.ground_truth_available and self.rmse_pixels < 0.40 and self.inlier_count >= 4
 
 
 
