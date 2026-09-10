@@ -8,26 +8,39 @@ from typing import Any
 import numpy as np
 
 from lunar_core.pipeline import LunarCorePipeline
-from lunar_core.models import SensorModality, SunAngles, TransformationType
-from samanvaya.data_io.import_real_pair import DEFAULT_ARTIFACT_ROOT, DEFAULT_MANIFEST_PATH, import_real_pair
+from lunar_core.models import SunAngles, TransformationType
+from samanvaya.data_io.import_real_pair import DEFAULT_ARTIFACT_ROOT, DEFAULT_MANIFEST_PATH
 
 
 def _make_mock_source_reference(source: np.ndarray, reference: np.ndarray):
     return source.astype(np.float32), reference.astype(np.float32)
 
 
+def _pair_entry(manifest_path: Path, pair_id: str) -> dict[str, Any]:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    pairs = payload.get("pairs", [])
+    for entry in pairs:
+        if str(entry.get("pair_id")) == str(pair_id):
+            return entry
+    raise KeyError(f"Pair ID {pair_id!r} was not found in the manifest.")
+
+
+def _read_image_array(path: Path) -> np.ndarray:
+    import rasterio
+
+    with rasterio.open(path) as src:
+        return src.read(1).astype(np.float32)
+
+
 def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_PATH, artifact_root: str | Path | None = None) -> dict[str, Any]:
     manifest_file = Path(manifest_path).expanduser().resolve()
     if not manifest_file.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_file}")
-    payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+
+    pair = _pair_entry(manifest_file, pair_id)
     if artifact_root is None:
         artifact_root = manifest_file.parent / "artifacts" / "real_validation"
     artifact_root = Path(artifact_root).expanduser().resolve()
-    pairs = payload.get("pairs", [])
-    pair = next((entry for entry in pairs if str(entry.get("pair_id")) == str(pair_id)), None)
-    if pair is None:
-        raise KeyError(f"Pair ID {pair_id!r} was not found in the manifest.")
 
     source_meta = pair["source_product"]
     ref_meta = pair["reference_product"]
@@ -37,13 +50,9 @@ def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_
     source_data = np.random.default_rng(0).normal(0.5, 0.05, size=(128, 128)).astype(np.float32)
     ref_data = np.random.default_rng(1).normal(0.5, 0.05, size=(128, 128)).astype(np.float32)
     if source_path.exists():
-        import rasterio
-        with rasterio.open(source_path) as src:
-            source_data = src.read(1).astype(np.float32)
+        source_data = _read_image_array(source_path)
     if ref_path.exists():
-        import rasterio
-        with rasterio.open(ref_path) as src:
-            ref_data = src.read(1).astype(np.float32)
+        ref_data = _read_image_array(ref_path)
 
     pipeline = LunarCorePipeline(transformation_type=TransformationType.HOMOGRAPHY)
     result = pipeline.register(
@@ -103,13 +112,92 @@ def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_
     return output
 
 
+def validate_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_PATH, artifact_root: str | Path | None = None) -> dict[str, Any]:
+    """Validate a real imported OHRC ↔ LROC pair using conservative evidence rules.
+
+    Scientific claims are only elevated to PASS when independent ground-truth control points
+    exist and the measured RMSE is within the ISRO mandate. In the absence of such evidence,
+    the function reports NOT_VALIDATED or FAIL with an explicit technical reason.
+    """
+    manifest_file = Path(manifest_path).expanduser().resolve()
+    if not manifest_file.exists():
+        raise FileNotFoundError(f"Manifest not found: {manifest_file}")
+
+    pair = _pair_entry(manifest_file, pair_id)
+    control_points_path = manifest_file.parent / "control_points" / f"{pair_id}.json"
+    if not control_points_path.exists():
+        status = {
+            "pair_id": pair_id,
+            "status": "NOT_VALIDATED",
+            "ground_truth_status": "PENDING_INDEPENDENT_GROUND_TRUTH",
+            "reason": "No independent control point file was supplied for this real pair; only reprojection consensus was computed.",
+            "metrics": {
+                "rmse_px": None,
+                "p95_px": None,
+                "inlier_count": 0,
+            },
+            "artifact_dir": pair.get("artifacts_dir"),
+        }
+        return status
+
+    try:
+        control_payload = json.loads(control_points_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Control-point file is not valid JSON: {control_points_path}") from exc
+
+    points = control_payload.get("points", [])
+    if not isinstance(points, list) or len(points) < 4:
+        return {
+            "pair_id": pair_id,
+            "status": "FAIL",
+            "ground_truth_status": "GROUND_TRUTH_AVAILABLE_BUT_INSUFFICIENT",
+            "reason": "Independent ground truth is present but fewer than four valid control points were supplied.",
+            "metrics": {"rmse_px": None, "p95_px": None, "inlier_count": 0},
+            "artifact_dir": pair.get("artifacts_dir"),
+        }
+
+    source_points = np.asarray([[float(p["source_x"]), float(p["source_y"])] for p in points], dtype=np.float64)
+    reference_points = np.asarray([[float(p["reference_x"]), float(p["reference_y"])] for p in points], dtype=np.float64)
+    if source_points.shape != reference_points.shape or source_points.shape[1] != 2:
+        return {
+            "pair_id": pair_id,
+            "status": "FAIL",
+            "ground_truth_status": "GROUND_TRUTH_AVAILABLE_BUT_INVALID",
+            "reason": "Annotated control points are malformed or mismatched between source and reference.",
+            "metrics": {"rmse_px": None, "p95_px": None, "inlier_count": 0},
+            "artifact_dir": pair.get("artifacts_dir"),
+        }
+
+    residuals = np.linalg.norm(source_points - reference_points, axis=1)
+    rmse = float(np.sqrt(np.mean(residuals ** 2)))
+    p95 = float(np.percentile(residuals, 95))
+    status_value = "PASS" if rmse < 0.40 and len(points) >= 4 else "FAIL"
+    if status_value == "PASS":
+        evidence = "Independent ground-truth control points available and RMSE is within the 0.40 px mandate."
+    else:
+        evidence = "Independent ground-truth control points are available, but the measured residuals do not meet the 0.40 px mandate."
+
+    return {
+        "pair_id": pair_id,
+        "status": status_value,
+        "ground_truth_status": "INDEPENDENT_GROUND_TRUTH_AVAILABLE",
+        "reason": evidence,
+        "metrics": {
+            "rmse_px": rmse,
+            "p95_px": p95,
+            "point_count": len(points),
+        },
+        "artifact_dir": pair.get("artifacts_dir"),
+    }
+
+
 def _main() -> None:
-    parser = argparse.ArgumentParser(description="Execute the real Samanvaya registration pipeline for a previously imported OHRC ↔ LROC pair.")
+    parser = argparse.ArgumentParser(description="Execute a conservative validation pass for a previously imported real OHRC ↔ LROC pair.")
     parser.add_argument("--pair-id", required=True)
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST_PATH), help="Manifest path")
     parser.add_argument("--artifact-root", default=str(DEFAULT_ARTIFACT_ROOT), help="Artifact root directory")
     args = parser.parse_args()
-    result = run_real_pair(args.pair_id, manifest_path=args.manifest, artifact_root=args.artifact_root)
+    result = validate_real_pair(args.pair_id, manifest_path=args.manifest, artifact_root=args.artifact_root)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

@@ -68,6 +68,18 @@ class RegistrationEvaluationReport:
         return self.homography_matrix
 
     @property
+    def scientific_status(self) -> str:
+        """Return the validation status that is scientifically defensible for this report."""
+        if self.ground_truth_available:
+            return "ground_truth_validated"
+        return "reprojection_consensus_only"
+
+    @property
+    def validation_status(self) -> str:
+        """Compatibility alias for the scientific-validation status."""
+        return self.scientific_status
+
+    @property
     def metrics(self) -> RegistrationMetrics:
         """Returns standard RegistrationMetrics instance for backwards compatibility."""
         return RegistrationMetrics(
@@ -92,6 +104,7 @@ class RegistrationEvaluationReport:
                 "framework": "lunar_core research build",
                 "metric_basis": self.metric_basis,
                 "ground_truth_available": self.ground_truth_available,
+                "validation_status": self.scientific_status,
             },
             "summary": {
                 "total_matches": self.total_matches,
@@ -114,6 +127,7 @@ class RegistrationEvaluationReport:
             "homography_matrix": self.homography_matrix,
             "tie_points_count": len(self.tie_points),
             "tie_points": self.tie_points,
+            "validation_status": self.scientific_status,
         }
 
     def export_json(self, output_path: Union[str, Path], indent: int = 2) -> str:
@@ -506,6 +520,9 @@ class EvaluationEngine:
                     control_point_rmse = float(cp_rmse)
                     rmse = control_point_rmse
             meets_mandate = bool(ground_truth_available and homography is not None and rmse < 0.40 and inlier_count >= 4)
+
+        if not ground_truth_available:
+            meets_mandate = False
 
         return RegistrationEvaluationReport(
             total_matches=total_matches,

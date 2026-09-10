@@ -8,6 +8,7 @@ from rasterio.transform import from_origin
 
 from samanvaya.data_io.import_real_pair import import_real_pair
 from samanvaya.validation.import_control_points import import_control_points
+from samanvaya.validation.run_real_pair import run_real_pair, validate_real_pair
 
 
 def _write_tif(path: Path, values: np.ndarray) -> None:
@@ -73,9 +74,24 @@ def test_real_pair_execution_reports_pending_ground_truth_without_control_points
     _write_tif(target_path, target)
 
     pair_id = import_real_pair(source_path, target_path, manifest_path=tmp_path / "real_manifest.json")
-    from samanvaya.validation.run_real_pair import run_real_pair
 
     status = run_real_pair(pair_id, manifest_path=tmp_path / "real_manifest.json")
 
     assert status["ground_truth_status"] == "PENDING_INDEPENDENT_GROUND_TRUTH"
     assert (tmp_path / "artifacts" / "real_validation" / pair_id / "metrics.json").exists()
+
+
+def test_validate_real_pair_reports_conservative_status_without_ground_truth(tmp_path: Path):
+    source_path = tmp_path / "CH2_OHRC_20240601_0003.tif"
+    target_path = tmp_path / "LRO_NAC_20240601_0003.tif"
+    source = np.random.default_rng(0).normal(0.5, 0.05, size=(96, 96)).astype(np.float32)
+    target = np.random.default_rng(1).normal(0.5, 0.05, size=(96, 96)).astype(np.float32)
+    _write_tif(source_path, source)
+    _write_tif(target_path, target)
+
+    pair_id = import_real_pair(source_path, target_path, manifest_path=tmp_path / "real_manifest.json")
+    status = validate_real_pair(pair_id, manifest_path=tmp_path / "real_manifest.json")
+
+    assert status["status"] in {"NOT_VALIDATED", "FAIL"}
+    assert status["ground_truth_status"] == "PENDING_INDEPENDENT_GROUND_TRUTH"
+    assert "reason" in status

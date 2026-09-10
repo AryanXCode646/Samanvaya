@@ -393,6 +393,18 @@ def main() -> None:
     p_validation.add_argument("--json", action="store_true", help="Emit JSON instead of a human-readable summary")
     p_validation.set_defaults(func=cmd_validation_summary)
 
+    # samanvaya validate-real
+    p_validate_real = subparsers.add_parser("validate-real", help="Validate a real imported OHRC ↔ LROC pair with conservative evidence rules")
+    p_validate_real.add_argument("--pair-id", required=True, help="Pair ID from the manifest")
+    p_validate_real.add_argument("--manifest", default="data/real/manifest.json", help="Real-pair manifest path")
+    p_validate_real.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_validate_real.set_defaults(func=lambda args: print(json.dumps(__import__("samanvaya.validation.run_real_pair", fromlist=["validate_real_pair"]).validate_real_pair(args.pair_id, manifest_path=args.manifest), indent=2) if args.json else "\n".join([
+        f"Pair: {args.pair_id}",
+        f"Status: {__import__('samanvaya.validation.run_real_pair', fromlist=['validate_real_pair']).validate_real_pair(args.pair_id, manifest_path=args.manifest)['status']}",
+        f"Ground truth: {__import__('samanvaya.validation.run_real_pair', fromlist=['validate_real_pair']).validate_real_pair(args.pair_id, manifest_path=args.manifest)['ground_truth_status']}",
+        f"Reason: {__import__('samanvaya.validation.run_real_pair', fromlist=['validate_real_pair']).validate_real_pair(args.pair_id, manifest_path=args.manifest)['reason']}",
+    ])))
+
     # samanvaya info
     p_info = subparsers.add_parser("info", help="Display system and mission configuration")
     p_info.set_defaults(func=cmd_info)
