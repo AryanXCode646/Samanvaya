@@ -1,9 +1,12 @@
 import csv
 import json
+import subprocess
+import sys
 from pathlib import Path
 import pytest
 
 from lunar_core.cli import cmd_catalog_show, cmd_evaluate, cmd_pair_discover, cmd_register
+from samanvaya.data_io.import_real_pair import import_real_pair
 
 
 def _manifest(path: Path) -> None:
@@ -103,3 +106,71 @@ def test_register_forwards_generic_source_and_target(monkeypatch):
     assert "--target" in captured["command"]
     assert "--chandrayaan" not in captured["command"]
     assert "--lro" not in captured["command"]
+
+
+def test_discover_data_cli_reports_ohrc_verified_and_lroc_missing(tmp_path):
+    source = tmp_path / "CH2_OHRC_20240601_0001.img"
+    source.write_bytes(b"\x00" * 64)
+    (tmp_path / "CH2_OHRC_20240601_0001.xml").write_text(
+        """
+        <Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1">
+            <Observation_Area>
+                <Time_Coordinates><start_date_time>2024-06-01T00:00:00Z</start_date_time></Time_Coordinates>
+                <Mission_Area>
+                    <Product_Parameters><pixel_resolution unit="m/pixel">0.28</pixel_resolution></Product_Parameters>
+                </Mission_Area>
+            </Observation_Area>
+            <File_Area_Observational>
+                <Array_2D_Image>
+                    <Axis_Array><elements>64</elements></Axis_Array>
+                    <Axis_Array><elements>64</elements></Axis_Array>
+                    <Element_Array><data_type>UnsignedByte</data_type></Element_Array>
+                </Array_2D_Image>
+            </File_Area_Observational>
+        </Product_Observational>
+        """,
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "samanvaya", "discover-data", "--root", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parents[1]),
+    )
+
+    assert result.returncode == 0
+    assert "OHRC" in result.stdout
+    assert "VERIFIED" in result.stdout
+    assert "LROC" in result.stdout
+    assert "NOT FOUND" in result.stdout
+    assert "No verified real pair available" in result.stdout
+
+
+def test_import_real_pair_reports_missing_lroc_blocker(tmp_path):
+    source = tmp_path / "CH2_OHRC_20240601_0001.img"
+    source.write_bytes(b"\x00" * 64)
+    (tmp_path / "CH2_OHRC_20240601_0001.xml").write_text(
+        """
+        <Product_Observational xmlns="http://pds.nasa.gov/pds4/pds/v1">
+            <Observation_Area>
+                <Time_Coordinates><start_date_time>2024-06-01T00:00:00Z</start_date_time></Time_Coordinates>
+                <Mission_Area>
+                    <Product_Parameters><pixel_resolution unit="m/pixel">0.28</pixel_resolution></Product_Parameters>
+                </Mission_Area>
+            </Observation_Area>
+            <File_Area_Observational>
+                <Array_2D_Image>
+                    <Axis_Array><elements>64</elements></Axis_Array>
+                    <Axis_Array><elements>64</elements></Axis_Array>
+                    <Element_Array><data_type>UnsignedByte</data_type></Element_Array>
+                </Array_2D_Image>
+            </File_Area_Observational>
+        </Product_Observational>
+        """,
+        encoding="utf-8",
+    )
+
+    missing_lroc = tmp_path / "missing_nac.img"
+    with pytest.raises(FileNotFoundError, match="LROC NAC product not found"):
+        import_real_pair(source, missing_lroc, manifest_path=tmp_path / "real_manifest.json")

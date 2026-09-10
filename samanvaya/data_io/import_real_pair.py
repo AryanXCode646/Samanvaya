@@ -117,9 +117,20 @@ def import_real_pair(
     artifact_root: str | Path = DEFAULT_ARTIFACT_ROOT,
 ) -> str:
     source_path = sanitize_path(ohrc_path)
+    if not source_path.exists():
+        raise FileNotFoundError("OHRC product not found: {source_path}")
+
     target_path = sanitize_path(lroc_path)
-    if not source_path.exists() or not target_path.exists():
-        raise FileNotFoundError("Both OHRC and LROC products must exist on disk before importing.")
+    if not target_path.exists():
+        raise FileNotFoundError(
+            "LROC NAC product not found.\n\n"
+            "OHRC:\n"
+            "  VERIFIED\n\n"
+            "LROC NAC:\n"
+            "  MISSING\n\n"
+            "No registration was executed.\n"
+            "No metrics were fabricated."
+        )
 
     source_product = inspect_product(source_path, root_dir=source_path.parent)
     target_product = inspect_product(target_path, root_dir=target_path.parent)
