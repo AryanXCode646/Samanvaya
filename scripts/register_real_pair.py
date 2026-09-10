@@ -212,14 +212,23 @@ def _sun_angles_for_product(product) -> Optional[SunAngles]:
     )
 
 
-def run(args: argparse.Namespace) -> None:
+def register_pair(
+    raw_dir: str | Path = "data/real/raw",
+    output_dir: str | Path = "data/real/results",
+    source: Optional[str] = None,
+    target: Optional[str] = None,
+    site: str = "unspecified",
+    tile_threshold: int = 4096,
+    tile_size: int = 1024,
+    overlap: int = 128,
+) -> int:
     started_at = datetime.now(timezone.utc).isoformat()
     started = time.perf_counter()
-    raw_dir = Path(args.raw_dir).expanduser().resolve()
-    output_dir = Path(args.output_dir).expanduser().resolve()
+    raw_dir = Path(raw_dir).expanduser().resolve()
+    output_dir = Path(output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    source_path = find_product(raw_dir, args.source, "source")
-    target_path = find_product(raw_dir, args.target, "target")
+    source_path = find_product(raw_dir, source, "source")
+    target_path = find_product(raw_dir, target, "target")
     source_product = inspect_product(source_path, root_dir=source_path.parent)
     target_product = inspect_product(target_path, root_dir=target_path.parent)
     source_modality = _modality_for_product(source_product)
@@ -342,6 +351,20 @@ def run(args: argparse.Namespace) -> None:
     print(f"RMSE: {report.rmse_pixels:.4f} px; inliers: {report.inlier_count}")
     print(f"Reports: {output_dir / 'evaluation_report.json'}, {output_dir / 'evaluation_report.csv'}")
     print(f"Provenance: {output_dir / 'provenance.json'}")
+    return 0
+
+
+def run(args: argparse.Namespace) -> int:
+    return register_pair(
+        raw_dir=args.raw_dir,
+        output_dir=args.output_dir,
+        source=args.source,
+        target=args.target,
+        site=args.site,
+        tile_threshold=args.tile_threshold,
+        tile_size=args.tile_size,
+        overlap=args.overlap,
+    )
 
 
 def main() -> None:
@@ -354,7 +377,7 @@ def main() -> None:
     parser.add_argument("--tile-threshold", type=int, default=4096)
     parser.add_argument("--tile-size", type=int, default=1024)
     parser.add_argument("--overlap", type=int, default=128)
-    run(parser.parse_args())
+    raise SystemExit(run(parser.parse_args()))
 
 
 if __name__ == "__main__":

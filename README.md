@@ -189,9 +189,13 @@ pip install -e .
 
 ### Validation status
 - IMPLEMENTED: mission-data ingestion, PDS4 label resolution, conservative metadata parsing, registration pipeline scaffolding, and evaluation exports.
-- TESTED: deterministic identity and catalog regressions; synthetic benchmark pipeline checks; no real-mission scientific claim is made from these results.
-- REAL-DATA TESTED: metadata and lazy-access validation only for locally supplied mission products when present; no registration-accuracy claim is implied.
+- TESTED: deterministic identity and catalog regressions; synthetic benchmark pipeline checks; representative PDS4 metadata fixtures for Chandrayaan-2 and LRO.
+- REAL-DATA TESTED: metadata extraction and lazy-access validation are exercised against representative real-mission metadata fixtures when available; no registration-accuracy claim is implied.
+- FULL IMAGE-LEVEL REAL-DATA VALIDATION: pending. This repository does not currently contain a checked-in real Chandrayaan-2 or LRO image pair sufficient to claim end-to-end geographic or matching validation.
 - SCIENTIFICALLY VALIDATED: not claimed. Any footprint overlap is labeled as an approximation until independent geospatial validation is available.
+
+### Merge-readiness stance
+The current codebase is suitable for a conservative metadata-hardening and workflow-validation pass, but it is not yet a scientifically complete end-to-end lunar mission registration claim. The repo should be considered merge-ready only under the narrower condition that the change is limited to evidence-backed metadata handling, transparent uncertainty states, and reproducible fixture-driven validation—not full real-image scientific validation.
 
 ### Footprint geometry scope
 Samanvaya currently records box-style footprint overlap as a planar bounding-box approximation. The `geometry_method` field is set to `planar_bounding_box_approximation`, and `overlap_status` is one of `APPROXIMATE`, `VERIFIED`, or `UNKNOWN`. Do not interpret planar overlap as a physically meaningful lunar footprint intersection without separate geodesic validation.
