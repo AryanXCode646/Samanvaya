@@ -212,12 +212,35 @@ def _sun_angles_for_product(product) -> Optional[SunAngles]:
     )
 
 
+def _load_ground_truth_control_points(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load a checked-in control-point JSON payload for scientific validation."""
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"Ground-truth control-point file not found: {resolved}")
+    payload = json.loads(resolved.read_text(encoding="utf-8"))
+    source_points = payload.get("source_points") or payload.get("src_points") or payload.get("source")
+    target_points = payload.get("target_points") or payload.get("ref_points") or payload.get("target")
+    if source_points is None or target_points is None:
+        raise ValueError(
+            "Ground-truth JSON must include exactly one source_points/target_points pair "
+            "or source/target point arrays."
+        )
+    src = np.asarray(source_points, dtype=np.float64)
+    tgt = np.asarray(target_points, dtype=np.float64)
+    if src.shape != tgt.shape or src.ndim != 2 or src.shape[1] != 2:
+        raise ValueError("Ground-truth control points must be a 2D array of shape (N, 2).")
+    if len(src) < 4:
+        raise ValueError("Ground-truth control points require at least 4 point pairs for scientific validation.")
+    return src, tgt
+
+
 def register_pair(
     raw_dir: str | Path = "data/real/raw",
     output_dir: str | Path = "data/real/results",
     source: Optional[str] = None,
     target: Optional[str] = None,
     site: str = "unspecified",
+    ground_truth: Optional[str | Path] = None,
     tile_threshold: int = 4096,
     tile_size: int = 1024,
     overlap: int = 128,
@@ -239,16 +262,16 @@ def register_pair(
         raise RuntimeError("IIRS spectral cubes are catalog-aware but not yet supported by the 2-D registration runner.")
     source_large_geotiff = source_path.suffix.lower() in {".tif", ".tiff"} and max(
         source_product.height or 0, source_product.width or 0
-    ) >= args.tile_threshold
+    ) >= tile_threshold
     target_large_geotiff = target_path.suffix.lower() in {".tif", ".tiff"} and max(
         target_product.height or 0, target_product.width or 0
-    ) >= args.tile_threshold
+    ) >= tile_threshold
     source_large_pds = source_path.suffix.lower() == ".img" and max(
         source_product.height or 0, source_product.width or 0
-    ) >= args.tile_threshold
+    ) >= tile_threshold
     target_large_pds = target_path.suffix.lower() == ".img" and max(
         target_product.height or 0, target_product.width or 0
-    ) >= args.tile_threshold
+    ) >= tile_threshold
 
     source = target = None
     source_masked = target_masked = 0
@@ -273,7 +296,7 @@ def register_pair(
             if not target_label.resolved or target_label.path is None:
                 raise FileNotFoundError(target_label.message or f"No PDS4 XML label for {target_path.name}")
             target_input = open_pds4_memmap(target_path, target_label.path)
-        tiled = PlanetaryTileProcessor(tile_size=args.tile_size, overlap=args.overlap)
+        tiled = PlanetaryTileProcessor(tile_size=tile_size, overlap=overlap)
         tiled_result = tiled.process(source_input, target_input, estimate_coarse_overlap=False)
         total_matches = tiled_result.metrics.total_matches
         inliers = tiled_result.global_inliers
@@ -294,9 +317,17 @@ def register_pair(
         total_matches, inliers, matrix = len(result.matches), result.inliers, result.transform_matrix
         matcher_path, processing_time_ms = result.matcher_path, result.metrics.processing_time_ms
 
+    ground_truth_points = None
+    if ground_truth is not None:
+        ground_truth_points = _load_ground_truth_control_points(ground_truth)
+
     report = EvaluationEngine.generate_report(
-        total_matches=total_matches, inliers=inliers, homography=matrix,
-        image_shape=target_shape, processing_time_ms=processing_time_ms,
+        total_matches=total_matches,
+        inliers=inliers,
+        homography=matrix,
+        image_shape=target_shape,
+        processing_time_ms=processing_time_ms,
+        ground_truth_control_points=ground_truth_points,
     )
     report.export_json(output_dir / "evaluation_report.json")
     report.export_csv(output_dir / "evaluation_report.csv")
@@ -328,9 +359,9 @@ def register_pair(
             "matcher": matcher_path,
             "fallback_used": "rift" in matcher_path.lower(),
             "photometric_correction": "enabled",
-            "tile_threshold": args.tile_threshold,
-            "tile_size": args.tile_size,
-            "overlap": args.overlap,
+            "tile_threshold": tile_threshold,
+            "tile_size": tile_size,
+            "overlap": overlap,
             "software_version": _software_version(),
         },
         "execution": {
@@ -338,12 +369,17 @@ def register_pair(
             "runtime_seconds": time.perf_counter() - started,
             "real_rmse_pixels": report.rmse_pixels,
             "inlier_count": report.inlier_count,
-            "ground_truth_available": False,
-            "metric_note": "Reprojection/consensus metric; no independent ground truth supplied.",
+            "ground_truth_available": bool(report.ground_truth_available),
+            "control_point_file": str(Path(ground_truth).expanduser().resolve()) if ground_truth is not None else None,
+            "metric_note": (
+                "Ground-truth control points supplied; scientific RMSE is based on independent control points."
+                if report.ground_truth_available
+                else "Reprojection/consensus metric; no independent ground truth supplied."
+            ),
         },
     }
     (output_dir / "provenance.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
-    print(f"Site: {args.site}")
+    print(f"Site: {site}")
     print(f"Source: {source_path.name} ({source_shape}, {source_gsd:g} m/px)")
     print(f"Target: {target_path.name} ({target_shape}, {target_gsd:g} m/px)")
     print(f"Masked nodata pixels: source={source_masked}, target={target_masked}")
@@ -361,6 +397,7 @@ def run(args: argparse.Namespace) -> int:
         source=args.source,
         target=args.target,
         site=args.site,
+        ground_truth=args.ground_truth,
         tile_threshold=args.tile_threshold,
         tile_size=args.tile_size,
         overlap=args.overlap,
@@ -373,6 +410,7 @@ def main() -> None:
     parser.add_argument("--output-dir", default="data/real/results")
     parser.add_argument("--source", "--chandrayaan", dest="source")
     parser.add_argument("--target", "--lro", dest="target")
+    parser.add_argument("--ground-truth", dest="ground_truth", default=None, help="Optional JSON file with source_points/target_points ground truth.")
     parser.add_argument("--site", default="unspecified")
     parser.add_argument("--tile-threshold", type=int, default=4096)
     parser.add_argument("--tile-size", type=int, default=1024)
