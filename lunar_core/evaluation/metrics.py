@@ -482,6 +482,7 @@ class EvaluationEngine:
                 if len(gt_ref) > 0:
                     cp_rmse, _, _ = cls.compute_projective_rmse(gt_ref, gt_src, homography)
                     control_point_rmse = float(cp_rmse)
+                    rmse = control_point_rmse
 
             ground_truth_available = control_point_rmse is not None
             meets_mandate = bool(ground_truth_available and rmse < 0.40 and inlier_count >= 4)

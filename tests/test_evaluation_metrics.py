@@ -187,6 +187,44 @@ def test_export_structured_json_and_scatter_plot(tmp_path: Path):
     assert "TIE POINT RESIDUAL ERROR TABLE" in csv_str
 
 
+def test_ground_truth_control_points_override_reprojection_rmse_for_validation():
+    """Independent GT control points must be the authoritative scientific RMSE, not inlier reprojection residuals."""
+    gt_ref = np.array([
+        [0.0, 0.0],
+        [10.0, 0.0],
+        [0.0, 10.0],
+        [10.0, 10.0],
+    ], dtype=np.float64)
+    gt_src = gt_ref + np.array([
+        [1.5, -2.0],
+        [1.0, -1.5],
+        [2.0, 0.25],
+        [1.75, 1.0],
+    ], dtype=np.float64)
+    H = np.eye(3)
+
+    # Inlier residuals are near zero because the matcher is internally consistent,
+    # but the true ground-truth control points show a scientifically meaningful offset.
+    inliers = [
+        KeypointMatch(ref_xy=(float(gt_ref[i, 0]), float(gt_ref[i, 1])), target_xy=(float(gt_ref[i, 0]), float(gt_ref[i, 1])), confidence=0.95)
+        for i in range(len(gt_ref))
+    ]
+
+    report = EvaluationEngine.generate_report(
+        total_matches=10,
+        inliers=inliers,
+        image_shape=(100, 100),
+        homography=H,
+        ground_truth_control_points=(gt_ref, gt_src),
+    )
+
+    assert report.ground_truth_available is True
+    assert report.control_point_rmse_pixels is not None
+    assert report.control_point_rmse_pixels > 0.40
+    assert report.rmse_pixels == pytest.approx(report.control_point_rmse_pixels, rel=1e-8)
+    assert report.meets_isro_mandate is False
+
+
 def test_standalone_metrics_module(tmp_path: Path):
     """Verifies the canonical evaluation metrics functions and reports."""
     from lunar_core.evaluation.metrics import (
