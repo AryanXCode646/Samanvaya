@@ -49,8 +49,10 @@ def evaluate_claims(result: dict[str, Any]) -> dict[str, str]:
     else:
         subpixel = "DATA_REQUIRED"
 
-    if spatial is not None and spatial >= 0.5 and status == "SUCCESS":
+    if spatial is not None and spatial >= 0.5 and status == "SUCCESS" and independent_ready:
         uniform = "PROVEN"
+    elif spatial is not None and spatial >= 0.5 and status == "SUCCESS":
+        uniform = "SUPPORTED"
     elif spatial is not None and spatial >= 0.2 and status == "SUCCESS":
         uniform = "PARTIAL"
     elif status == "SUCCESS":
