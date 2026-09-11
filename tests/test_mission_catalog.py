@@ -255,3 +255,21 @@ def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
     assert pair.status == "rejected"
     assert pair.overlap_status == "NON_OVERLAPPING"
     assert pair.overlap_ratio == 0.0
+
+
+def test_pair_selector_computes_solar_delta(tmp_path: Path):
+    """Verifies that solar vector delta is accurately computed from sun angles."""
+    source = MissionProduct(
+        "Chandrayaan-2", "OHRC", "source", tmp_path / "source.img",
+        footprint=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        sun_azimuth_deg=180.0, sun_elevation_deg=30.0,
+    )
+    target = MissionProduct(
+        "LRO", "NAC", "target", tmp_path / "target.img",
+        footprint=[(0.5, 0.5), (1.5, 0.5), (1.5, 1.5), (0.5, 1.5)],
+        sun_azimuth_deg=0.0, sun_elevation_deg=30.0,
+    )
+
+    pair = propose_pair(source, target)
+    assert pair.solar_angle_delta is not None
+    assert abs(pair.solar_angle_delta - 120.0) < 1.0

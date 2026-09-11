@@ -79,23 +79,34 @@ class DenseLoFTRMatcher:
         self.model_version = "kornia_loftr"
         self.precision = "float32"
         self.weight_load_error = None
+        self.weight_checksum = None
         try:
             self.loftr = KF.LoFTR(pretrained=pretrained).to(self.device)
             self.is_pretrained = pretrained is not None
             self.weight_source = str(pretrained) if pretrained is not None else "NONE"
             self.weight_status = "LOADED" if self.is_pretrained else "EXPLICIT_NONE"
+            # Attempt to record weight checksum if checkpoint exists in torch cache
+            try:
+                import hashlib
+                from pathlib import Path
+                ckpt_path = Path.home() / ".cache" / "torch" / "hub" / "checkpoints" / "loftr_outdoor.ckpt"
+                if ckpt_path.is_file():
+                    with open(ckpt_path, "rb") as f:
+                        self.weight_checksum = hashlib.sha256(f.read()).hexdigest()
+            except Exception:
+                pass
+            self.loftr.eval()
         except Exception as exc:
             self.weight_load_error = str(exc)
             logger.warning(
-                "LoFTR pretrained weights failed to load (%s); untrained random "
-                "weights are being used and results are not meaningful.",
+                "LoFTR pretrained weights failed to load (%s); refusing to silently "
+                "initialize untrained random weights for scientific registration.",
                 exc,
             )
-            self.loftr = KF.LoFTR(pretrained=None).to(self.device)
+            self.loftr = None
             self.is_pretrained = False
-            self.weight_source = "FAILED_FALLBACK_RANDOM"
-            self.weight_status = "FAILED_LOAD"
-        self.loftr.eval()
+            self.weight_source = "UNAVAILABLE"
+            self.weight_status = "MODEL_WEIGHTS_UNAVAILABLE"
 
     @staticmethod
     def prepare_geotiff_array(image: np.ndarray) -> Tuple[torch.Tensor, np.ndarray]:
@@ -141,9 +152,12 @@ class DenseLoFTRMatcher:
         src_shape: Tuple[int, int],
         ref_shape: Tuple[int, int],
     ) -> List[KeypointMatch]:
-        """
-        Extracts dense cross-attention correspondences using LoFTR.
-        """
+        if self.loftr is None or self.weight_status == "MODEL_WEIGHTS_UNAVAILABLE":
+            raise RuntimeError(
+                "MODEL_WEIGHTS_UNAVAILABLE: Pretrained LoFTR weights could not be loaded; "
+                "refusing to generate ungrounded random matches."
+            )
+
         source_tensor = source_tensor.to(self.device)
         ref_tensor = ref_tensor.to(self.device)
 
@@ -425,6 +439,7 @@ class DenseLoFTRMatcher:
                 "model_version": self.model_version,
                 "weight_source": self.weight_source,
                 "weight_status": self.weight_status,
+                "weight_checksum": self.weight_checksum,
                 "device": str(self.device),
                 "precision": self.precision,
                 "learned_weights_used": self.is_pretrained,

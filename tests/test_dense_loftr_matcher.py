@@ -131,3 +131,70 @@ def test_dense_loftr_end_to_end_matching_and_magsac():
     residuals = [m.residual_error for m in inliers]
     mean_rmse = np.sqrt(np.mean(np.array(residuals)**2))
     assert mean_rmse < 1.0, f"Expected sub-pixel inlier RMSE < 1.0 px, got {mean_rmse:.4f}"
+
+
+def test_loftr_model_weight_safety():
+    """Verifies that if weights fail to load, DenseLoFTRMatcher refuses to run random weights."""
+    matcher = DenseLoFTRMatcher(pretrained=None)
+    matcher.weight_status = "MODEL_WEIGHTS_UNAVAILABLE"
+    matcher.loftr = None
+
+    t_src = torch.zeros((1, 1, 64, 64))
+    t_ref = torch.zeros((1, 1, 64, 64))
+
+    with pytest.raises(RuntimeError, match="MODEL_WEIGHTS_UNAVAILABLE"):
+        matcher.extract_dense_correspondences(t_src, t_ref, (64, 64), (64, 64))
+
+
+def test_scale_space_low_confidence_coarse_roi_guard():
+    """Verifies that low Fourier-Mellin confidence falls back to identity common-GSD alignment."""
+    from lunar_core.alignment.scale_space import ScaleSpaceLocalizer
+
+    # Two synthetic images where Fourier-Mellin cannot find reliable similarity peak
+    img1 = np.full((128, 128), 100.0, dtype=np.float32)
+    img2 = np.full((128, 128), 100.0, dtype=np.float32)
+
+    roi = ScaleSpaceLocalizer.extract_coarse_roi(img1, img2, ref_gsd=1.0, tgt_gsd=1.0)
+    assert roi.ref_roi.shape == (128, 128)
+    assert roi.target_roi.shape == (128, 128)
+    assert roi.coarse_rotation_deg == 0.0
+    assert roi.coarse_translation == (0.0, 0.0)
+    assert np.allclose(roi.target_to_common, np.eye(3))
+
+
+def test_homography_branch_consistency_in_pipeline():
+    """Verifies pipeline homography branch: refined coords -> new H -> new residuals -> final metrics."""
+    from lunar_core.pipeline import LunarCorePipeline
+    from lunar_core.models import TransformationType
+
+    # Create synthetic test pair with known homography
+    sim = LunarTerrainSimulator(size=(128, 128), seed=55)
+    dem = sim.generate_dem(num_craters=6)
+    sun = SunAngles(azimuth_deg=45.0, elevation_deg=35.0)
+    ref = sim.render_optical_image(dem, sun)
+
+    H_true = np.array([
+        [1.01, 0.005, -2.0],
+        [-0.005, 1.01, 1.5],
+        [0.00001, 0.00001, 1.0],
+    ], dtype=np.float64)
+    src = cv2.warpPerspective(ref, np.linalg.inv(H_true), (128, 128))
+
+    pipe = LunarCorePipeline(transformation_type=TransformationType.HOMOGRAPHY)
+    result = pipe.register(ref, src)
+
+    if result.transform_matrix is not None and len(result.inliers) >= 4:
+        # Check that all inliers have residual_error recomputed against final matrix
+        for m in result.inliers:
+            assert m.residual_error is not None
+            pt_h = np.array([m.target_xy[0], m.target_xy[1], 1.0])
+            proj = result.transform_matrix @ pt_h
+            proj_xy = (proj[0] / proj[2], proj[1] / proj[2])
+            expected_res = float(np.sqrt((proj_xy[0] - m.ref_xy[0])**2 + (proj_xy[1] - m.ref_xy[1])**2))
+            assert abs(m.residual_error - expected_res) < 1e-4
+
+        # Check that metrics.rmse_pixels matches the recomputed inlier residuals
+        inlier_residuals = [m.residual_error for m in result.inliers]
+        expected_rmse = float(np.sqrt(np.mean(np.array(inlier_residuals)**2)))
+        assert abs(result.metrics.rmse_pixels - expected_rmse) < 1e-4
+

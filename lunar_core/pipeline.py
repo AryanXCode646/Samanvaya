@@ -101,9 +101,10 @@ class LunarCorePipeline:
         try:
             initial_matches = self.dense_matcher.match_patches(roi.ref_roi, roi.target_roi)
         except RuntimeError as exc:
-            if "out of memory" not in str(exc).lower() and "cuda" not in str(exc).lower():
+            err_text = str(exc).lower()
+            if "out of memory" not in err_text and "cuda" not in err_text and "model_weights_unavailable" not in err_text:
                 raise
-            logger.warning("Dense LoFTR failed with a memory error; switching to Classical RIFT fallback: %s", exc)
+            logger.warning("Dense LoFTR failed (%s); switching to Classical RIFT fallback.", exc)
             initial_matches = []
 
         # Map matcher coordinates from the common aligned ROI back to each original image.
@@ -155,8 +156,14 @@ class LunarCorePipeline:
                     pc_tgt.max_moment,
                     pc_tgt.orientation_max_idx,
                 )
-                matrix, inliers = self.estimator.estimate(rift_matches, self.trans_type)
-                logger.info("Matcher path: %s (%d inliers).", matcher_path, len(inliers))
+                global_matches = rift_matches
+                allocated_matches = (
+                    self.anms.cap_grid_cells(global_matches, target_image.shape, cap_per_cell=4, use_source_coords=True)
+                    if self.enable_anms and global_matches
+                    else global_matches
+                )
+                matrix, inliers = self.estimator.estimate(allocated_matches, self.trans_type)
+                logger.info("Matcher path: %s (%d inliers from %d matches).", matcher_path, len(inliers), len(global_matches))
             except Exception:
                 logger.exception("Classical RIFT fallback failed; returning an empty registration result.")
                 matcher_path = "classical_rift_failed"
@@ -236,7 +243,6 @@ class LunarCorePipeline:
                             )
                         inliers = recomputed_inliers
 
-
         # Step 8: Warping target into reference coordinate frame
         warped: Optional[np.ndarray] = None
         if matrix is not None:
@@ -251,6 +257,7 @@ class LunarCorePipeline:
             total_matches=len(global_matches),
             inliers=inliers,
             image_shape=ref_image.shape,
+            homography=matrix,
             processing_time_ms=elapsed_ms,
         )
 

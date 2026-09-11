@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import math
 from typing import Optional
 
 from lunar_core.data_io.mission_product import MissionProduct
@@ -51,6 +52,10 @@ class ProductPair:
             self.pair_type = f"{self.source_mission or 'unknown'}:{self.source_instrument or 'unknown'}__{self.target_mission or 'unknown'}:{self.target_instrument or 'unknown'}"
         if self.candidate_class is None:
             self.candidate_class = self.status.upper()
+
+    @property
+    def solar_angle_delta(self) -> Optional[float]:
+        return self.illumination_delta_deg
 
     def to_dict(self) -> dict[str, object]:
         return {
