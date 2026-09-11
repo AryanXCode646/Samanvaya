@@ -1156,7 +1156,7 @@ if img_source is not None and img_ref is not None:
 
         # Step 4: 8x8 Grid ANMS & 2D Parabolic Taylor Sub-pixel Refinement
         progress_bar.progress(80, text="Step 4/5: Grid-Based ANMS (8x8 Grid) & 2D Parabolic Taylor Refinement...")
-        anms_matches = matcher.apply_grid_anms_8x8(raw_matches, norm_ref.shape)
+        anms_matches = matcher.apply_grid_anms_8x8(raw_matches, norm_src.shape, use_source_coords=True)
 
         if enable_subpixel and anms_matches:
             refined_matches = matcher.refine_subpixel_taylor_2d(anms_matches, norm_src, norm_ref)

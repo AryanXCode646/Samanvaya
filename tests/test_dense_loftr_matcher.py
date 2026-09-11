@@ -53,11 +53,13 @@ def test_grid_based_anms_8x8():
             )
         )
 
-    capped = matcher.apply_grid_anms_8x8(clumped_matches, image_shape=(256, 256))
-    # Each cell should have at most 3 matches
-    assert len(capped) == 6  # 3 from cell (0, 0) + 3 from cell (7, 7)
-    # The top-confidence ones must be preserved
-    assert capped[0].confidence == 0.95
+    capped_src = matcher.apply_grid_anms_8x8(clumped_matches, image_shape=(256, 256), use_source_coords=True)
+    assert len(capped_src) == 6
+    assert capped_src[0].confidence == 0.95
+
+    capped_ref = matcher.apply_grid_anms_8x8(clumped_matches, image_shape=(256, 256), use_source_coords=False)
+    assert len(capped_ref) == 6
+    assert capped_ref[0].confidence == 0.95
 
 
 def test_subpixel_taylor_2d_parabolic_refinement():

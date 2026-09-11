@@ -32,7 +32,12 @@ class RegistrationWindows:
     spectral_provenance: dict[str, Any] | None = None
 
 
-def extract_registration_windows(source_product: Any, reference_product: Any) -> RegistrationWindows:
+def extract_registration_windows(
+    source_product: Any,
+    reference_product: Any,
+    *,
+    spectral_method: str = "auto",
+) -> RegistrationWindows:
     """Read only the selected registration windows and preserve original offsets.
 
     Without authoritative comparable footprints, the safe result is the full native
@@ -53,10 +58,19 @@ def extract_registration_windows(source_product: Any, reference_product: Any) ->
         if is_iirs:
             wavelengths = getattr(source_product, "wavelengths", None)
             if source.count > 1:
-                if wavelengths is not None and len(wavelengths) == source.count:
-                    from lunar_core.preprocessing.spectral import HyperspectralBandSelector
-                    cube_data = source.read(window=source_window, masked=True).astype(np.float32).filled(np.nan)
-                    selector = HyperspectralBandSelector(wavelengths=wavelengths, num_bands=source.count)
+                from lunar_core.preprocessing.spectral import HyperspectralBandSelector
+
+                cube_data = source.read(window=source_window, masked=True).astype(np.float32).filled(np.nan)
+                selector = HyperspectralBandSelector(wavelengths=wavelengths, num_bands=source.count)
+
+                if spectral_method == "pca":
+                    source_image, spectral_provenance = selector.extract_2d_registration_representation(
+                        cube_data, method="pca", normalize=True
+                    )
+                    spectral_representation = "robust_pca_structural_band"
+                    spectral_provenance["instrument"] = "IIRS"
+                    spectral_provenance["band_count"] = source.count
+                elif wavelengths is not None and len(wavelengths) == source.count:
                     source_image = selector.extract_continuum_band(cube_data, normalize=True)
                     spectral_representation = "wavelength_continuum_band"
                     spectral_provenance = {
@@ -68,7 +82,7 @@ def extract_registration_windows(source_product: Any, reference_product: Any) ->
                     }
                 else:
                     raise ValueError(
-                        "IIRS_REPRESENTATION_UNCERTAIN: Authoritative spectral band calibration/wavelength metadata is unavailable to justify a 2-D registration continuum."
+                        "IIRS_REPRESENTATION_UNCERTAIN: Authoritative spectral band calibration/wavelength metadata is unavailable to justify a 2-D registration continuum. Set spectral_representation='pca' for robust first-principal-component representation."
                     )
             elif str(getattr(source_product, "instrument", "") or "").upper() == "IIRS":
                 raise ValueError(
@@ -79,7 +93,23 @@ def extract_registration_windows(source_product: Any, reference_product: Any) ->
         else:
             source_image = source.read(1, window=source_window, masked=True).astype(np.float32).filled(np.nan)
 
-        reference_image = reference.read(1, window=reference_window, masked=True).astype(np.float32).filled(np.nan)
+        is_ref_iirs = (
+            str(getattr(reference_product, "instrument", "") or "").upper() == "IIRS"
+            or "IIR" in str(getattr(reference_product, "product_id", "") or "").upper()
+            or reference.count > 1
+        )
+        if is_ref_iirs and reference.count > 1:
+            from lunar_core.preprocessing.spectral import HyperspectralBandSelector
+
+            ref_wavelengths = getattr(reference_product, "wavelengths", None)
+            ref_cube = reference.read(window=reference_window, masked=True).astype(np.float32).filled(np.nan)
+            ref_selector = HyperspectralBandSelector(wavelengths=ref_wavelengths, num_bands=reference.count)
+            if spectral_method == "pca" or ref_wavelengths is None:
+                reference_image, _ = ref_selector.extract_2d_registration_representation(ref_cube, method="pca", normalize=True)
+            else:
+                reference_image = ref_selector.extract_continuum_band(ref_cube, normalize=True)
+        else:
+            reference_image = reference.read(1, window=reference_window, masked=True).astype(np.float32).filled(np.nan)
         source_mask = np.isfinite(source_image)
         reference_mask = np.isfinite(reference_image)
         ratio = None

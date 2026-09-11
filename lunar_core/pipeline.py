@@ -201,21 +201,40 @@ class LunarCorePipeline:
                             ]
                             matrix = refined_mat
             elif self.trans_type == TransformationType.HOMOGRAPHY:
-                refined_mat, _ = cv2.findHomography(src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=1.5)
-                if refined_mat is not None:
-                    matrix = refined_mat
-                    inliers = [
-                        KeypointMatch(
-                            ref_xy=m.ref_xy,
-                            target_xy=m.target_xy,
-                            confidence=m.confidence,
-                            subpixel_refined=True,
-                            residual_error=m.residual_error,
-                            source_frame="FULL_SOURCE_IMAGE",
-                            reference_frame="FULL_REFERENCE_IMAGE",
-                        )
-                        for m in refined_inliers
-                    ]
+                method = getattr(cv2, "USAC_MAGSAC", cv2.RANSAC)
+                refined_mat, mask = cv2.findHomography(
+                    src_pts, dst_pts, method=method, ransacReprojThreshold=1.5, maxIters=5000, confidence=0.999
+                )
+                if refined_mat is not None and mask is not None:
+                    inlier_idx = np.where(mask.ravel() == 1)[0]
+                    if len(inlier_idx) >= 4:
+                        matrix = refined_mat
+                        recomputed_inliers = []
+                        for idx in inlier_idx:
+                            m = refined_inliers[idx]
+                            pt_h = np.array([m.target_xy[0], m.target_xy[1], 1.0], dtype=np.float64)
+                            proj = refined_mat @ pt_h
+                            if abs(proj[2]) > 1e-8:
+                                proj_xy = (proj[0] / proj[2], proj[1] / proj[2])
+                                res = float(np.sqrt((proj_xy[0] - m.ref_xy[0]) ** 2 + (proj_xy[1] - m.ref_xy[1]) ** 2))
+                            else:
+                                res = float(np.linalg.norm(np.array(m.ref_xy) - np.array(m.target_xy)))
+                            recomputed_inliers.append(
+                                KeypointMatch(
+                                    ref_xy=m.ref_xy,
+                                    target_xy=m.target_xy,
+                                    confidence=m.confidence,
+                                    subpixel_refined=True,
+                                    residual_error=res,
+                                    sigma_x=m.sigma_x,
+                                    sigma_y=m.sigma_y,
+                                    cov_xy=m.cov_xy,
+                                    weight=m.weight,
+                                    source_frame="FULL_SOURCE_IMAGE",
+                                    reference_frame="FULL_REFERENCE_IMAGE",
+                                )
+                            )
+                        inliers = recomputed_inliers
 
 
         # Step 8: Warping target into reference coordinate frame

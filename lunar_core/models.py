@@ -23,6 +23,8 @@ class SensorModality(str, Enum):
 
 
 class TransformationType(str, Enum):
+    TRANSLATION = "translation"
+    SIMILARITY = "similarity"
     AFFINE = "affine"
     HOMOGRAPHY = "homography"
     THIN_PLATE_SPLINE = "thin_plate_spline"
@@ -103,9 +105,12 @@ class RegistrationMetrics:
     inlier_ratio: float
     spatial_uniformity_entropy: float  # [0.0, 1.0] Shannon entropy
     mean_residual_pixels: float = 0.0
+    median_residual_pixels: float = 0.0
+    p95_residual_pixels: float = 0.0
     max_residual_pixels: float = 0.0
     processing_time_ms: float = 0.0
     ground_truth_available: bool = False
+    reprojection_consensus_error: Optional[float] = None
 
     @property
     def inlier_ratio_percent(self) -> float:
@@ -131,3 +136,100 @@ class RegistrationResult:
     metrics: RegistrationMetrics
     warped_target: Optional[np.ndarray] = None
     matcher_path: str = "dense_loftr"
+
+
+class ValidationStatus(str, Enum):
+    """Explicit scientific status categories."""
+    GROUND_TRUTH_VALIDATED = "GROUND_TRUTH_VALIDATED"
+    REPROJECTION_ONLY = "REPROJECTION_ONLY"
+    NO_GROUND_TRUTH = "NO_GROUND_TRUTH"
+    FAILED_VALIDATION = "FAILED_VALIDATION"
+    CANDIDATE_UNVERIFIED = "CANDIDATE_UNVERIFIED"
+    PROXIMITY_CANDIDATE = "PROXIMITY_CANDIDATE"
+
+
+@dataclass
+class Footprint:
+    """Planetary polygon footprint on the lunar sphere."""
+    vertices: List[Tuple[float, float]]  # (longitude, latitude) pairs
+    status: str = "APPROXIMATE"  # "APPROXIMATE", "AUTHORITATIVE", "UNAVAILABLE"
+    crs: str = "IAU_2015_MOON"
+    area_km2: Optional[float] = None
+    longitude_convention: str = "POSITIVE_EAST"
+    latitude_convention: str = "PLANETOCENTRIC"
+    provenance: Optional[str] = None
+
+
+# Match is canonical alias for KeypointMatch
+Match = KeypointMatch
+
+
+@dataclass
+class MatchSet:
+    """Typed container for keypoint correspondences at a specific pipeline stage."""
+    matches: List[KeypointMatch]
+    stage: str = "RAW"  # "RAW", "ANMS", "INLIER", "REFINED"
+    source_frame: str = "FULL_SOURCE_IMAGE"
+    reference_frame: str = "FULL_REFERENCE_IMAGE"
+    coordinate_convention: str = "pixel_centers_0_indexed_col_row"
+    provenance: Optional[str] = None
+
+    def __len__(self) -> int:
+        return len(self.matches)
+
+
+@dataclass
+class TransformEstimate:
+    """Estimated geometric transform with diagnostics and condition indicators."""
+    model_type: str  # "TRANSLATION", "SIMILARITY", "AFFINE", "HOMOGRAPHY"
+    matrix: np.ndarray
+    inlier_count: int
+    inlier_ratio: float
+    reprojection_consensus_error: float
+    median_residual: float = 0.0
+    p95_residual: float = 0.0
+    max_residual: float = 0.0
+    condition_number: float = 1.0
+    is_plausible: bool = True
+    status: str = "SUCCESS"  # "SUCCESS", "DEGENERATE_TRANSFORM", "INSUFFICIENT_MATCHES"
+    source_frame: str = "FULL_SOURCE_IMAGE"
+    target_frame: str = "FULL_REFERENCE_IMAGE"
+    provenance: Optional[str] = None
+
+
+@dataclass
+class ValidationResult:
+    """Complete validation record distinguishing ground-truth from reprojection consensus."""
+    status: ValidationStatus
+    ground_truth_available: bool
+    reprojection_consensus_error: float
+    ground_truth_rmse: Optional[float] = None
+    inlier_count: int = 0
+    inlier_ratio: float = 0.0
+    median_residual: float = 0.0
+    p95_residual: float = 0.0
+    max_residual: float = 0.0
+    spatial_entropy: float = 0.0
+    spatial_coverage_ratio: float = 0.0
+    meets_mandate: bool = False
+    reason: Optional[str] = None
+    provenance: Optional[str] = None
+
+
+@dataclass
+class EvidenceRecord:
+    """Reproducible audit trail record for an executed registration."""
+    input_metadata: Dict[str, Any]
+    checksums: Dict[str, str]
+    git_commit_sha: str
+    software_version: str
+    matcher_selection: str
+    preprocessing_parameters: Dict[str, Any]
+    candidate_pair_decision: Dict[str, Any]
+    raw_matches_count: int
+    filtered_matches_count: int
+    refined_matches_count: int
+    transform_estimate: Dict[str, Any]
+    metrics: Dict[str, Any]
+    validation_status: str
+    warnings: List[str] = field(default_factory=list)

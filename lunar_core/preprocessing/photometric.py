@@ -232,3 +232,54 @@ class PhotometricNormalizer:
             corrected = np.clip(corrected, 0.0, 1.0)
 
         return corrected.astype(np.float32), valid_mask
+
+    def normalize_with_provenance(
+        self,
+        image: np.ndarray,
+        sun_angles: Optional[SunAngles],
+        dem_data: Optional[np.ndarray] = None,
+        slope_gradients: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+        pixel_gsd: float = 1.0,
+        model: str = "lommel_seeliger",
+    ) -> Tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+        """Normalize illumination with explicit metadata provenance matching Section 7."""
+        if sun_angles is None:
+            return image.astype(np.float32), np.ones(image.shape, dtype=bool), {
+                "photometric_model": "none",
+                "geometry_source": "none",
+                "fallback": True,
+                "reason": "solar_geometry_unavailable",
+            }
+
+        has_dem = dem_data is not None or slope_gradients is not None
+        geom_source = "dem_slope_facets" if has_dem else "pds4_sun_angles_planar"
+
+        if model.lower() == "minnaert":
+            corr, mask = self.normalize_minnaert(
+                image,
+                sun_angles,
+                dem_data=dem_data,
+                slope_gradients=slope_gradients,
+                pixel_gsd=pixel_gsd,
+            )
+            model_name = "Minnaert"
+        else:
+            corr, mask = self.normalize(
+                image,
+                sun_angles,
+                dem_data=dem_data,
+                slope_gradients=slope_gradients,
+                pixel_gsd=pixel_gsd,
+            )
+            model_name = "Lommel-Seeliger"
+
+        provenance = {
+            "photometric_model": model_name,
+            "geometry_source": geom_source,
+            "sun_azimuth_deg": sun_angles.azimuth_deg,
+            "sun_elevation_deg": sun_angles.elevation_deg,
+            "fallback": not has_dem,
+            "reason": None if has_dem else "planar_geometry_dem_unavailable",
+        }
+        return corr, mask, provenance
+

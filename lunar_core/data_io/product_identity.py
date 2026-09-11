@@ -135,7 +135,62 @@ def _first_value(root: Any, *names: str) -> Optional[str]:
     return None
 
 
+class PDS3Node:
+    """Emulates XML ElementTree node for PDS3 key-value properties."""
+
+    def __init__(self, tag: str, text: str, attrib: Optional[dict[str, str]] = None) -> None:
+        self.tag = tag
+        self.text = text
+        self.attrib = attrib or {}
+
+    def iter(self):
+        yield self
+
+
+class PDS3Label:
+    """Structured container for PDS3 statements."""
+
+    def __init__(self, items: list[tuple[str, str]], raw_path: Path) -> None:
+        self.items = items
+        self.path = raw_path
+        self.dict: dict[str, str] = {k.upper(): v for k, v in items}
+
+    def iter(self):
+        for k, v in self.items:
+            yield PDS3Node(k, v)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.dict.get(key.upper(), default)
+
+
+def _read_pds3_label(label_path: Path) -> PDS3Label:
+    content = label_path.read_text(encoding="utf-8", errors="ignore")
+    items: list[tuple[str, str]] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("/*") or line.startswith("//"):
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.split("/*")[0].strip().strip("\"'")
+            # Remove unit brackets like <KM> or <METERS/PIXEL>
+            v_clean = re.sub(r"\s*<[^>]+>", "", v)
+            items.append((k.lower(), v_clean))
+            # Also map ^IMAGE to file_name
+            if k.upper() in {"^IMAGE", "IMAGE", "^TIFF", "^DATA"}:
+                items.append(("file_name", v_clean))
+            if k.upper() == "INSTRUMENT_HOST_ID":
+                items.append(("spacecraft_id", v_clean))
+                items.append(("mission_name", v_clean))
+            if k.upper() == "MAP_SCALE":
+                items.append(("gsd_m", v_clean))
+    return PDS3Label(items, label_path)
+
+
 def _read_label(label_path: Path) -> Any:
+    if label_path.suffix.lower() in {".lbl", ".pds"}:
+        return _read_pds3_label(label_path)
     from defusedxml import ElementTree
 
     return ElementTree.parse(label_path).getroot()
@@ -166,10 +221,11 @@ def _same_stem_labels(image_path: Path) -> list[Path]:
     parent = image_path.parent
     if not parent.is_dir():
         return []
+    valid_suffixes = {".xml", ".lbl"}
     return sorted(
         path
         for path in parent.iterdir()
-        if path.is_file() and path.suffix.lower() == ".xml" and path.stem.lower() == image_path.stem.lower()
+        if path.is_file() and path.suffix.lower() in valid_suffixes and path.stem.lower() == image_path.stem.lower()
     )
 
 
@@ -181,6 +237,8 @@ def _mission_convention_labels(image_path: Path) -> list[Path]:
     ordered = [
         parent / f"{stem}_label.xml",
         parent / f"{stem}.lbl.xml",
+        parent / f"{stem}.lbl",
+        parent / f"{stem}.LBL",
     ]
     found: list[Path] = []
     seen: set[Path] = set()
@@ -202,7 +260,7 @@ def _sibling_xml_files(image_path: Path) -> list[Path]:
     parent = image_path.parent
     if not parent.is_dir():
         return []
-    return sorted(path for path in parent.iterdir() if path.is_file() and path.suffix.lower() == ".xml")
+    return sorted(path for path in parent.iterdir() if path.is_file() and path.suffix.lower() in {".xml", ".lbl"})
 
 
 def _safe_parse(label_path: Path) -> Optional[Any]:
@@ -413,7 +471,16 @@ def identify_mission_instrument(
     if mission is not None or instrument is not None:
         if mission is None and product_identifier:
             mission, _ = _identity_from_identifier(product_identifier)
-        return mission, instrument, IdentificationMethod.PDS4_METADATA
+        if instrument is None and product_identifier:
+            _, instrument = _identity_from_identifier(product_identifier)
+        if instrument is None and mission == "LRO":
+            instrument = "NAC"
+        method = (
+            IdentificationMethod.PDS3_METADATA
+            if isinstance(label_root, PDS3Label)
+            else IdentificationMethod.PDS4_METADATA
+        )
+        return mission, instrument, method
 
     if product_identifier:
         ident_mission, ident_instrument = _identity_from_identifier(product_identifier)

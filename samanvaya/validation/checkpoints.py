@@ -48,3 +48,48 @@ def load_checkpoints(path: str | Path, *, source_shape: tuple[int, int] | None =
             raise ValueError(f"Reference coordinate outside bounds at checkpoint {point_id}")
         validated.append({"point_id": point_id, **values, "provenance": str(row["provenance"]), "quality": str(row["quality"]).upper(), "notes": row.get("notes", "")})
     return validated
+
+
+def evaluate_checkpoints(transform: Any, points: list[dict[str, Any]]) -> dict[str, Any]:
+    """Evaluate transformation matrix against independent ground-truth checkpoints."""
+    import numpy as np
+
+    if len(points) < 4:
+        return {"status": "CHECKPOINT_VALIDATION_FAILED", "checkpoint_count": len(points), "reason": "At least four checkpoints are required."}
+    matrix = np.asarray(transform, dtype=float)
+    source = np.asarray([[point["source_x"], point["source_y"]] for point in points], dtype=float)
+    reference = np.asarray([[point["reference_x"], point["reference_y"]] for point in points], dtype=float)
+    homogeneous = np.column_stack([source, np.ones(len(source))])
+    projected = homogeneous @ matrix.T
+    projected = projected[:, :2] / projected[:, 2:3]
+    errors = np.linalg.norm(projected - reference, axis=1)
+
+    integer_projected = np.round(projected)
+    int_errors = np.linalg.norm(integer_projected - reference, axis=1)
+
+    subpixel_rmse = float(np.sqrt(np.mean(errors ** 2)))
+    integer_rmse = float(np.sqrt(np.mean(int_errors ** 2)))
+    subpixel_median = float(np.median(errors))
+    integer_median = float(np.median(int_errors))
+    subpixel_p95 = float(np.percentile(errors, 95))
+    integer_p95 = float(np.percentile(int_errors, 95))
+    improvement = float(((integer_rmse - subpixel_rmse) / max(integer_rmse, 1e-6)) * 100.0) if integer_rmse > 0 else 0.0
+
+    return {
+        "status": "READY",
+        "checkpoint_count": len(points),
+        "valid_checkpoint_count": int(np.isfinite(errors).sum()),
+        "rmse_pixels": subpixel_rmse,
+        "subpixel_rmse_pixels": subpixel_rmse,
+        "integer_rmse_pixels": integer_rmse,
+        "median_error_pixels": subpixel_median,
+        "subpixel_median_pixels": subpixel_median,
+        "integer_median_pixels": integer_median,
+        "p95_error_pixels": subpixel_p95,
+        "subpixel_p95_pixels": subpixel_p95,
+        "integer_p95_pixels": integer_p95,
+        "improvement_percentage": improvement,
+        "max_error_pixels": float(np.max(errors)),
+        "mean_error_pixels": float(np.mean(errors)),
+    }
+

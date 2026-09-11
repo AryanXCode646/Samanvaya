@@ -230,6 +230,120 @@ def _generate_residual_vector_plot(path: Path, inliers: list[Any], transform_obj
     plt.close(fig)
 
 
+def _generate_8panel_diagnostic_plot(
+    path: Path,
+    source: np.ndarray,
+    reference: np.ndarray,
+    warped: np.ndarray,
+    matches: list[Any],
+    inliers: list[Any],
+    reg_transform: RegistrationTransform,
+    grid_rows: int = 8,
+    grid_cols: int = 8,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10), dpi=120)
+
+    def _norm(img: np.ndarray) -> np.ndarray:
+        fin = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        mn, mx = float(np.min(fin)), float(np.max(fin))
+        if mx - mn < 1e-6:
+            return np.zeros(fin.shape, dtype=np.float32)
+        return (fin - mn) / (mx - mn)
+
+    src_n = _norm(source)
+    ref_n = _norm(reference)
+    warp_n = _norm(warped)
+
+    # Panel 1: Source
+    axes[0, 0].imshow(src_n, cmap="gray")
+    axes[0, 0].set_title(f"1. Source Image ({source.shape[1]}x{source.shape[0]})", fontsize=10, fontweight="bold")
+    axes[0, 0].set_xlabel("X (px)")
+    axes[0, 0].set_ylabel("Y (px)")
+
+    # Panel 2: Reference
+    axes[0, 1].imshow(ref_n, cmap="gray")
+    axes[0, 1].set_title(f"2. Reference Image ({reference.shape[1]}x{reference.shape[0]})", fontsize=10, fontweight="bold")
+    axes[0, 1].set_xlabel("X (px)")
+    axes[0, 1].set_ylabel("Y (px)")
+
+    # Panel 3: Raw matches
+    axes[0, 2].imshow(src_n, cmap="gray")
+    if matches:
+        raw_x = [m.target_xy[0] for m in matches[:1000]]
+        raw_y = [m.target_xy[1] for m in matches[:1000]]
+        axes[0, 2].scatter(raw_x, raw_y, c="cyan", s=8, alpha=0.6, label=f"Raw ({len(matches)})")
+        axes[0, 2].legend(loc="upper right", fontsize=8)
+    axes[0, 2].set_title(f"3. Raw Candidate Matches (N={len(matches)})", fontsize=10, fontweight="bold")
+
+    # Panel 4: Filtered inliers (RANSAC verified)
+    axes[0, 3].imshow(src_n, cmap="gray")
+    if inliers:
+        inl_x = [m.target_xy[0] for m in inliers]
+        inl_y = [m.target_xy[1] for m in inliers]
+        axes[0, 3].scatter(inl_x, inl_y, c="lime", s=14, alpha=0.8, label=f"Inliers ({len(inliers)})")
+        axes[0, 3].legend(loc="upper right", fontsize=8)
+    axes[0, 3].set_title(f"4. Filtered Inliers (N={len(inliers)})", fontsize=10, fontweight="bold")
+
+    # Panel 5: Refined inliers (subpixel refined)
+    axes[1, 0].imshow(ref_n, cmap="gray")
+    refined = [m for m in inliers if getattr(m, "subpixel_refined", False)]
+    if refined:
+        ref_rx = [m.ref_xy[0] for m in refined]
+        ref_ry = [m.ref_xy[1] for m in refined]
+        axes[1, 0].scatter(ref_rx, ref_ry, c="yellow", s=14, alpha=0.8, label=f"Sub-pixel ({len(refined)})")
+        axes[1, 0].legend(loc="upper right", fontsize=8)
+    elif inliers:
+        ref_rx = [m.ref_xy[0] for m in inliers]
+        ref_ry = [m.ref_xy[1] for m in inliers]
+        axes[1, 0].scatter(ref_rx, ref_ry, c="orange", s=14, alpha=0.8, label=f"Inliers ({len(inliers)})")
+        axes[1, 0].legend(loc="upper right", fontsize=8)
+    axes[1, 0].set_title(f"5. Refined Inliers on Reference (N={len(refined)})", fontsize=10, fontweight="bold")
+
+    # Panel 6: 8x8 Spatial grid occupancy heatmap
+    from lunar_core.postprocessing.anms import SpatialUniformDistributor
+    distributor = SpatialUniformDistributor(grid_rows=grid_rows, grid_cols=grid_cols)
+    metrics_dist = distributor.compute_spatial_metrics(inliers, source.shape, use_source_coords=True)
+    counts_arr = np.array(metrics_dist["points_per_cell"]["counts"], dtype=np.float64).reshape(grid_rows, grid_cols)
+    h_src, w_src = source.shape[:2]
+    im_heat = axes[1, 1].imshow(counts_arr, extent=[0, w_src, h_src, 0], cmap="viridis", aspect="auto", alpha=0.8)
+    if inliers:
+        axes[1, 1].scatter([m.target_xy[0] for m in inliers], [m.target_xy[1] for m in inliers], c="white", s=8, alpha=0.7)
+    for r in range(grid_rows + 1):
+        axes[1, 1].axhline(r * (h_src / grid_rows), color="white", linestyle=":", linewidth=0.5, alpha=0.5)
+    for c in range(grid_cols + 1):
+        axes[1, 1].axvline(c * (w_src / grid_cols), color="white", linestyle=":", linewidth=0.5, alpha=0.5)
+    axes[1, 1].set_title(f"6. 8x8 Spatial Grid (Cov: {metrics_dist['coverage_fraction']:.1%}, H: {metrics_dist['spatial_entropy']:.2f})", fontsize=10, fontweight="bold")
+    plt.colorbar(im_heat, ax=axes[1, 1], fraction=0.046, pad=0.04)
+
+    # Panel 7: Registered Overlay
+    blend = 0.5 * ref_n + 0.5 * warp_n
+    axes[1, 2].imshow(blend, cmap="magma")
+    axes[1, 2].set_title("7. Registered Overlay (Ref + Warped)", fontsize=10, fontweight="bold")
+
+    # Panel 8: Residual Vectors & Histogram
+    residuals = [float(m.residual_error) for m in inliers if getattr(m, "residual_error", None) is not None]
+    if residuals:
+        n_bins = min(25, max(5, len(residuals) // 2))
+        axes[1, 3].hist(residuals, bins=n_bins, color="coral", edgecolor="black", alpha=0.7)
+        rmse = float(np.sqrt(np.mean(np.square(residuals))))
+        med = float(np.median(residuals))
+        p95 = float(np.percentile(residuals, 95))
+        axes[1, 3].axvline(rmse, color="red", linestyle="--", linewidth=1.5, label=f"RMSE: {rmse:.2f}px")
+        axes[1, 3].axvline(med, color="blue", linestyle=":", linewidth=1.5, label=f"Median: {med:.2f}px")
+        axes[1, 3].axvline(p95, color="purple", linestyle="-.", linewidth=1.5, label=f"P95: {p95:.2f}px")
+        axes[1, 3].legend(loc="upper right", fontsize=8)
+        axes[1, 3].set_xlabel("Residual Magnitude (pixels)")
+        axes[1, 3].set_ylabel("Count")
+    else:
+        axes[1, 3].text(0.5, 0.5, "No residuals computed", ha="center", va="center", transform=axes[1, 3].transAxes)
+    axes[1, 3].set_title("8. Reprojection Residual Histogram", fontsize=10, fontweight="bold")
+
+    plt.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+
+
 def _generate_visual_artifacts(
     visual_dir: Path,
     source: np.ndarray,
@@ -293,14 +407,22 @@ def _generate_visual_artifacts(
     ax.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
     fig.savefig(visual_dir / "uniform_matches.png", dpi=100)
+    fig.savefig(visual_dir / "match_distribution.png", dpi=100)
     plt.close(fig)
 
-    # 4. registered_overlay.png
+    from lunar_core.postprocessing.anms import generate_spatial_distribution_plot
+    generate_spatial_distribution_plot(visual_dir / "spatial_distribution_heatmap.png", inliers, source.shape, use_source_coords=True)
+
+    # 4. registered_overlay.png & overlay.png
     blend = cv2.addWeighted(ref_u8, 0.5, warp_u8, 0.5, 0)
     cv2.imwrite(str(visual_dir / "registered_overlay.png"), blend)
+    cv2.imwrite(str(visual_dir / "overlay.png"), blend)
 
     # 5. residual_vectors.png
     _generate_residual_vector_plot(visual_dir / "residual_vectors.png", inliers, reg_transform)
+
+    # 6. diagnostic_dashboard.png (Publication-grade 8-panel diagnostic)
+    _generate_8panel_diagnostic_plot(visual_dir / "diagnostic_dashboard.png", source, reference, warped, matches, inliers, reg_transform)
 
 
 def register_products(source_product: Any, reference_product: Any, output_dir: str | Path, *, config: Optional[dict[str, Any]] = None) -> RealRegistrationResult:
@@ -316,8 +438,9 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
     }
     source_id = source_product.product_id or str(source_product.image_path)
     reference_id = reference_product.product_id or str(reference_product.image_path)
+    spectral_method = config.get("spectral_representation", "auto") if config else "auto"
     try:
-        windows = extract_registration_windows(source_product, reference_product)
+        windows = extract_registration_windows(source_product, reference_product, spectral_method=spectral_method)
         source, reference = windows.source_image, windows.reference_image
         with rasterio.open(Path(reference_product.image_path)) as reference_dataset:
             reference_profile = reference_dataset.profile.copy()
@@ -603,7 +726,7 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
         "width": int(reference.shape[1]),
         "height": int(reference.shape[0]),
         "dtype": str(reference_profile.get("dtype", "float32")),
-        "nodata": float(reference_profile.get("nodata", -9999.0)),
+        "nodata": float(reference_profile["nodata"]) if reference_profile.get("nodata") is not None else -9999.0,
         "crs": str(reference_profile.get("crs", "")),
         "input_source_transform": src_transform_repr,
         "input_reference_transform": ref_transform_repr,
@@ -673,6 +796,38 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
     # Generate visual artifacts
     _generate_residual_vector_plot(output_path / "residual_vectors.png", result.inliers, reg_transform)
     _generate_visual_artifacts(output_path / "visual", source, reference, warped_original, result.matches, result.inliers, reg_transform, selected_matches=result.matches)
+
+    # Standard Section 22 Artifact Exports
+    (output_path / "transform.json").write_text(json.dumps({
+        "model": "HOMOGRAPHY",
+        "matrix": result.transform_matrix.tolist(),
+        "source_frame": "FULL_SOURCE_IMAGE",
+        "target_frame": "FULL_REFERENCE_IMAGE",
+    }, indent=2), encoding="utf-8")
+
+    metrics_record = {
+        "rmse_pixels": result.metrics.rmse_pixels,
+        "inlier_ratio": float(result.metrics.inlier_ratio),
+        "inlier_count": len(result.inliers),
+        "raw_matches": len(result.matches),
+        "spatial_entropy": spatial_dist.get("spatial_entropy"),
+        "coverage_ratio": spatial_dist.get("coverage_ratio"),
+        "estimated_transform": result.transform_matrix.tolist(),
+    }
+    (output_path / "metrics.json").write_text(json.dumps(metrics_record, indent=2), encoding="utf-8")
+
+    import shutil
+    if (output_path / "visual" / "overlay.png").exists():
+        shutil.copy(output_path / "visual" / "overlay.png", output_path / "overlay.png")
+    if (output_path / "visual" / "match_distribution.png").exists():
+        shutil.copy(output_path / "visual" / "match_distribution.png", output_path / "match_distribution.png")
+    if (output_path / "visual" / "diagnostic_dashboard.png").exists():
+        shutil.copy(output_path / "visual" / "diagnostic_dashboard.png", output_path / "diagnostic_dashboard.png")
+    if (output_path / "registered_source.tif").exists():
+        try:
+            (output_path / "registered.tif").symlink_to("registered_source.tif")
+        except Exception:
+            shutil.copy(output_path / "registered_source.tif", output_path / "registered.tif")
 
     return RealRegistrationResult(
         status="SUCCESS",
