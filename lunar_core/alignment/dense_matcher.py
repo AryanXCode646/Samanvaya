@@ -168,12 +168,21 @@ class DenseLoFTRMatcher:
         self,
         matches: List[KeypointMatch],
         image_shape: Tuple[int, int],
+        use_source_coords: bool = True,
     ) -> List[KeypointMatch]:
         """
-        Subdivides the reference frame into an 8x8 spatial grid (64 cells).
-        Enforces equal cap of top-confidence correspondences per cell,
-        eliminating feature clumping on high-contrast crater rims.
+        Subdivides the scene into an 8x8 spatial grid (64 cells).
+        Enforces equal cap of top-confidence correspondences per cell in FULL_SOURCE_IMAGE coordinates.
         """
+        return self.cap_grid_cells(matches, image_shape, use_source_coords=use_source_coords)
+
+    def cap_grid_cells(
+        self,
+        matches: List[KeypointMatch],
+        image_shape: Tuple[int, int],
+        use_source_coords: bool = True,
+    ) -> List[KeypointMatch]:
+        """Caps the maximum matches permitted in any single spatial bin in FULL_SOURCE_IMAGE coordinates."""
         if not matches:
             return []
 
@@ -185,9 +194,9 @@ class DenseLoFTRMatcher:
         grid_buckets: List[List[KeypointMatch]] = [[] for _ in range(bins * bins)]
 
         for m in matches:
-            rx, ry = m.ref_xy
-            gx = min(max(0, int(rx // cell_w)), bins - 1)
-            gy = min(max(0, int(ry // cell_h)), bins - 1)
+            coord_x, coord_y = m.target_xy if use_source_coords else m.ref_xy
+            gx = min(max(0, int(coord_x // cell_w)), bins - 1)
+            gy = min(max(0, int(coord_y // cell_h)), bins - 1)
             cell_idx = gy * bins + gx
             grid_buckets[cell_idx].append(m)
 
@@ -380,8 +389,8 @@ class DenseLoFTRMatcher:
             src_tensor, ref_tensor, norm_src.shape, norm_ref.shape
         )
 
-        # Step 3: Apply Grid-Based ANMS over 8x8 spatial grid
-        anms_matches = self.apply_grid_anms_8x8(raw_matches, norm_ref.shape)
+        # Step 3: Apply Grid-Based ANMS over 8x8 spatial grid in source frame
+        anms_matches = self.apply_grid_anms_8x8(raw_matches, norm_src.shape, use_source_coords=True)
 
         # Step 4: Apply 2D parabolic Taylor-series sub-pixel refinement
         refined_matches = self.refine_subpixel_taylor_2d(anms_matches, norm_src, norm_ref)

@@ -15,12 +15,51 @@ def _status_value(product: MissionProduct) -> str:
     return str(getattr(product.status, "value", product.status))
 
 
+def classify_product(product: MissionProduct) -> str:
+    """Classify product into AUTHORIZED_REAL, SYNTHETIC_FIXTURE, UNVERIFIED, or INVALID."""
+    status = _status_value(product).lower()
+
+    # 1. Explicit invalid detection (priority over fixture tags)
+    if status in {"invalid", "unsupported"}:
+        return "INVALID"
+    if product.validation_message and ("fail" in str(product.validation_message).lower() or "error" in str(product.validation_message).lower()):
+        return "INVALID"
+    if product.width is not None and product.height is not None:
+        if product.width <= 0 or product.height <= 0:
+            return "INVALID"
+
+    # 2. Synthetic fixture detection (scoped to fixture directory names, not pytest temp paths)
+    img_path = Path(product.image_path) if product.image_path else Path()
+    path_parts = {part.lower() for part in img_path.parts}
+    prod_id = str(product.product_id or "").lower()
+    synthetic_markers = {"synthetic", "fixture", "fixtures", "sample_data", "mock", "dummy"}
+    if bool(path_parts & synthetic_markers) or any(m in prod_id for m in synthetic_markers) or img_path.stem.lower().startswith("synthetic") or img_path.stem.lower().startswith("synth"):
+        return "SYNTHETIC_FIXTURE"
+
+    # 3. Verify existence on filesystem
+    if not product.image_path or not img_path.is_file():
+        return "UNVERIFIED"
+
+    # Recognized planetary missions
+    mission_str = str(product.mission or "").upper()
+    valid_missions = ("CHANDRAYAAN-2", "CHANDRAYAAN-1", "CH2", "CH1", "LRO", "LROC", "SELENE", "KAGUYA")
+    if not any(vm in mission_str for vm in valid_missions):
+        return "UNVERIFIED"
+
+    # Verified flight product with validated metadata
+    if status == "validated" and product.gsd_m is not None and product.gsd_m > 0 and product.width and product.height:
+        return "AUTHORIZED_REAL"
+
+    return "UNVERIFIED"
+
+
 def product_inventory_record(product: MissionProduct) -> dict[str, object]:
     record = product.to_dict()
     required = ("mission", "instrument", "product_id", "width", "height", "band_count", "gsd_m", "acquisition_time")
     present = sum(record.get(field) not in (None, "") for field in required)
     record["metadata_completeness"] = f"{present}/{len(required)}"
     record["path"] = record.get("image_path")
+    record["classification"] = classify_product(product)
     return record
 
 

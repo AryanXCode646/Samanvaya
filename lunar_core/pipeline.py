@@ -136,9 +136,9 @@ class LunarCorePipeline:
             for m in initial_matches
         ]
 
-        # Step 5: Postprocessing - Grid-Based ANMS Equal-Cell Capping
+        # Step 5: Postprocessing - Grid-Based ANMS Equal-Cell Capping in SOURCE Frame
         if self.enable_anms and global_matches:
-            allocated_matches = self.anms.cap_grid_cells(global_matches, ref_image.shape, cap_per_cell=4)
+            allocated_matches = self.anms.cap_grid_cells(global_matches, target_image.shape, cap_per_cell=4, use_source_coords=True)
         else:
             allocated_matches = global_matches
 

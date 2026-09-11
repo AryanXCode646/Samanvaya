@@ -48,6 +48,7 @@ class MissionProduct:
     gsd_source: Optional[str] = None
     wavelength_min_um: Optional[float] = None
     wavelength_max_um: Optional[float] = None
+    wavelengths: Optional[list[float]] = None
     acquisition_time: Optional[str] = None
     center_lat_deg: Optional[float] = None
     center_lon_deg: Optional[float] = None

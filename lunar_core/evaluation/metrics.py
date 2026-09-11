@@ -537,8 +537,9 @@ class EvaluationEngine:
             else:
                 mean_res, median_res, max_res, std_res, ce90 = 999.0, 999.0, 999.0, 0.0, 999.0
 
-            entropy = cls.compute_spatial_entropy(ref_pts, image_shape, grid_bins=8)
-            spatial_quality = cls.compute_spatial_quality(ref_pts, image_shape, grid_bins=8)
+            # SIH PS 26166 mandate: spatial distribution operates on source / moving image
+            entropy = cls.compute_spatial_entropy(src_pts, image_shape, grid_bins=8)
+            spatial_quality = cls.compute_spatial_quality(src_pts, image_shape, grid_bins=8)
 
             # Package individual tie points
             tie_points: List[Dict[str, Any]] = []

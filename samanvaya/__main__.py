@@ -134,7 +134,32 @@ def main(argv: list[str] | None = None) -> int:
     validate.add_argument("--root", default=".", help="Repository root containing data/real/manifest.json")
     validate.add_argument("--json", action="store_true", help="Emit validation result as JSON")
 
+    inv_cmd = subparsers.add_parser("inventory", help="Inspect and categorize repository products into AUTHORIZED_REAL, SYNTHETIC_FIXTURE, UNVERIFIED, INVALID")
+    inv_cmd.add_argument("--root", default="data", help="Root directory to scan for products (default: data)")
+    inv_cmd.add_argument("--output", help="Optional output JSON path for inventory evidence")
+    inv_cmd.add_argument("--json", action="store_true", help="Emit inventory as JSON to stdout")
+
     args = parser.parse_args(argv)
+    if args.command == "inventory":
+        from lunar_core.data_io.discovery import inventory_products
+
+        records = inventory_products(args.root)
+        if getattr(args, "output", None):
+            out_file = Path(args.output).expanduser().resolve()
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "root": str(Path(args.root).resolve()),
+                "total_products": len(records),
+                "by_classification": {},
+                "products": records,
+            }
+            for rec in records:
+                cls_val = str(rec.get("classification", "UNVERIFIED"))
+                payload["by_classification"][cls_val] = payload["by_classification"].get(cls_val, 0) + 1
+            out_file.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        if args.json or not getattr(args, "output", None):
+            print(json.dumps(records, indent=2, default=str))
+        return 0
     if args.command == "discover-data":
         summary = discover_real_data(args.root)
         if args.json:

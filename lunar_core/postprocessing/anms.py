@@ -92,24 +92,25 @@ class SpatialUniformDistributor:
         matches: List[KeypointMatch],
         image_shape: Tuple[int, int],
         cap_per_cell: int = 4,
+        use_source_coords: bool = True,
     ) -> List[KeypointMatch]:
         """
         Subdivides the scene into an 8x8 or 16x16 grid and caps top-confidence matches per cell.
-        Guarantees uniform spatial distribution and prevents feature clumping along high-relief crater rims.
+        Operates on FULL_SOURCE_IMAGE coordinates by default (SIH PS 26166 source uniformity requirement).
         """
         if not matches:
             return []
 
-        h, w = image_shape
+        h, w = image_shape[:2]
         cell_h = h / self.grid_rows
         cell_w = w / self.grid_cols
 
         buckets: List[List[KeypointMatch]] = [[] for _ in range(self.grid_rows * self.grid_cols)]
 
         for m in matches:
-            rx, ry = m.ref_xy
-            gx = min(max(0, int(rx // cell_w)), self.grid_cols - 1)
-            gy = min(max(0, int(ry // cell_h)), self.grid_rows - 1)
+            coord_x, coord_y = m.target_xy if use_source_coords else m.ref_xy
+            gx = min(max(0, int(coord_x // cell_w)), self.grid_cols - 1)
+            gy = min(max(0, int(coord_y // cell_h)), self.grid_rows - 1)
             idx = gy * self.grid_cols + gx
             buckets[idx].append(m)
 
@@ -126,24 +127,25 @@ class SpatialUniformDistributor:
         self,
         matches: List[KeypointMatch],
         image_shape: Tuple[int, int],
+        use_source_coords: bool = True,
     ) -> float:
         """
         Computes the Normalized Shannon Spatial Entropy H in [0.0, 1.0] across the lattice.
-        Target: H >= 0.95 (uniformly distributed throughout image, zero clumping).
+        Target: H >= 0.70 (uniformly distributed throughout source image, zero clumping).
         """
         if not matches:
             return 0.0
 
-        h, w = image_shape
+        h, w = image_shape[:2]
         cell_h = h / self.grid_rows
         cell_w = w / self.grid_cols
         total_cells = self.grid_rows * self.grid_cols
 
         counts = np.zeros(total_cells, dtype=np.float64)
         for m in matches:
-            rx, ry = m.ref_xy
-            gx = min(max(0, int(rx // cell_w)), self.grid_cols - 1)
-            gy = min(max(0, int(ry // cell_h)), self.grid_rows - 1)
+            coord_x, coord_y = m.target_xy if use_source_coords else m.ref_xy
+            gx = min(max(0, int(coord_x // cell_w)), self.grid_cols - 1)
+            gy = min(max(0, int(coord_y // cell_h)), self.grid_rows - 1)
             idx = gy * self.grid_cols + gx
             counts[idx] += 1.0
 
@@ -155,6 +157,64 @@ class SpatialUniformDistributor:
         shannon = -float(np.sum(p * np.log2(p)))
         max_shannon = float(np.log2(total_cells))
         return float(np.clip(shannon / max_shannon, 0.0, 1.0))
+
+    def compute_spatial_metrics(
+        self,
+        matches: List[KeypointMatch],
+        image_shape: Tuple[int, int],
+        use_source_coords: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Computes detailed spatial distribution metrics across the grid on FULL_SOURCE_IMAGE:
+        coverage_fraction, occupied_cells, points_per_cell, max_cluster_fraction, spatial_entropy.
+        """
+        total_cells = self.grid_rows * self.grid_cols
+        if not matches:
+            return {
+                "coverage_fraction": 0.0,
+                "occupied_cells": 0,
+                "total_cells": total_cells,
+                "points_per_cell": {"mean": 0.0, "min": 0, "max": 0, "std": 0.0, "counts": [0] * total_cells},
+                "max_cluster_fraction": 0.0,
+                "spatial_entropy": 0.0,
+            }
+
+        h, w = image_shape[:2]
+        cell_h = h / float(self.grid_rows)
+        cell_w = w / float(self.grid_cols)
+
+        counts = np.zeros(total_cells, dtype=np.int64)
+        for m in matches:
+            x, y = m.target_xy if use_source_coords else m.ref_xy
+            gx = min(max(0, int(x // cell_w)), self.grid_cols - 1)
+            gy = min(max(0, int(y // cell_h)), self.grid_rows - 1)
+            idx = gy * self.grid_cols + gx
+            counts[idx] += 1
+
+        total_pts = int(len(matches))
+        occupied = int(np.count_nonzero(counts))
+        coverage = float(occupied / total_cells)
+        max_cluster_fraction = float(np.max(counts) / total_pts) if total_pts > 0 else 0.0
+
+        p = counts[counts > 0].astype(float) / total_pts
+        shannon = -float(np.sum(p * np.log2(p))) if len(p) > 0 else 0.0
+        max_shannon = float(np.log2(total_cells))
+        norm_entropy = float(np.clip(shannon / max_shannon, 0.0, 1.0)) if max_shannon > 0 else 0.0
+
+        return {
+            "coverage_fraction": coverage,
+            "occupied_cells": occupied,
+            "total_cells": total_cells,
+            "points_per_cell": {
+                "mean": float(np.mean(counts)),
+                "min": int(np.min(counts)),
+                "max": int(np.max(counts)),
+                "std": float(np.std(counts)),
+                "counts": counts.tolist(),
+            },
+            "max_cluster_fraction": max_cluster_fraction,
+            "spatial_entropy": norm_entropy,
+        }
 
 
 def uniform_distribute(
