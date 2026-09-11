@@ -7,6 +7,27 @@
 
 ---
 
+## VERIFIED LOCAL BENCHMARK SNAPSHOT (2026-09-11)
+The project was executed against the bundled lunar benchmark pair using the headless CLI:
+
+- Source: `scenario_a_ohrc_apollo11.tif`
+- Reference: `scenario_a_lronac_apollo11.tif`
+- Output: `output/demo_run/`
+
+Measured local evidence from the actual run:
+- Total raw matches: 673
+- Verified inliers: 216
+- Inlier ratio: 32.10%
+- RMSE: 0.8253 px
+- Spatial entropy: 0.9861 / 1.0
+- Exported artifacts: registered GeoTIFF, evaluation JSON, residual scatter plot, ISIS3 GCP CSV, mission PDF
+
+> This is a verified local benchmark run, not a claim of real mission-data accuracy. The repository explicitly keeps real Chandrayaan-2/LRO scientific validation separate from synthetic/local benchmark evidence until a ground-truth pair is supplied and independently validated.
+
+---
+
+---
+
 ## EXECUTIVE TIMING MATRIX
 
 | Slide | Subject | Timing | Cumulative | Objective |

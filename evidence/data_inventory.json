@@ -1,0 +1,220 @@
+{
+  "root": "/home/aryan/Projects/Samanvaya/data",
+  "total_products": 3,
+  "by_classification": {
+    "UNVERIFIED": 1,
+    "AUTHORIZED_REAL": 2
+  },
+  "products": [
+    {
+      "mission": "Chandrayaan-1",
+      "instrument": "HYSI",
+      "product_id": "urn:isro:isda:ch1_cho.iir:data_calibrated:ch1_hys_nci_20090802t145937380_d_img_d18",
+      "image_path": "/home/aryan/Projects/Samanvaya/data/calibrated/20090802/ch1_hys_nci_20090802T145937380_d_img_d18.qub",
+      "label_path": "/home/aryan/Projects/Samanvaya/data/calibrated/20090802/ch1_hys_nci_20090802T145937380_d_img_d18.xml",
+      "file_format": "qub",
+      "format": "qub",
+      "width": 256,
+      "height": 10917,
+      "band_count": 64,
+      "dtype": "IEEE754LSBSingle",
+      "gsd_m": 80.0,
+      "gsd_source": "instrument_default",
+      "wavelength_min_um": null,
+      "wavelength_max_um": null,
+      "acquisition_time": "2009-08-02T14:59:37.380Z",
+      "center_lat_deg": 8.9141700395,
+      "center_lon_deg": 355.79022543025,
+      "footprint": [
+        [
+          354.919686803,
+          -4.45391379
+        ],
+        [
+          356.583723473,
+          -4.45391379
+        ],
+        [
+          356.583723473,
+          22.282556444
+        ],
+        [
+          354.919686803,
+          22.282556444
+        ]
+      ],
+      "crs": null,
+      "projection": null,
+      "spacecraft": null,
+      "spacecraft_name": null,
+      "sun_azimuth_deg": null,
+      "sun_elevation_deg": null,
+      "sun_geometry_source": "unknown",
+      "incidence_angle_deg": null,
+      "emission_angle_deg": null,
+      "phase_angle_deg": null,
+      "fill_value": null,
+      "no_data_value": null,
+      "processing_level": "Calibrated",
+      "product_type": "Product_Observational",
+      "metadata_source": "/home/aryan/Projects/Samanvaya/data/calibrated/20090802/ch1_hys_nci_20090802T145937380_d_img_d18.xml",
+      "identification_method": "pds4_metadata",
+      "label_association_method": "same_stem",
+      "geometry_method": "lat_lon_bounding_box_prefilter",
+      "footprint_status": "APPROXIMATE",
+      "overlap_status": null,
+      "archive": "local authorized data",
+      "source_url": null,
+      "access_mode": "LOCAL",
+      "metadata_timestamp": "2026-09-11T03:27:58+00:00",
+      "sha256": null,
+      "ingestion_status": "local_file_discovered",
+      "status": "partial",
+      "validation_status": "partial",
+      "validation_message": "Spectral cube metadata parsed; 2-D registration representation is not implemented.",
+      "metadata_completeness": "8/8",
+      "path": "/home/aryan/Projects/Samanvaya/data/calibrated/20090802/ch1_hys_nci_20090802T145937380_d_img_d18.qub",
+      "classification": "UNVERIFIED"
+    },
+    {
+      "mission": "Chandrayaan-2",
+      "instrument": "OHRC",
+      "product_id": "urn:isro:isda:ch2_cho.ohr:data_calibrated:ch2_ohr_ncp_20211228t2209123959_d_img_d18",
+      "image_path": "/home/aryan/Projects/Samanvaya/data/calibrated/20211228/ch2_ohr_ncp_20211228T2209123959_d_img_d18.img",
+      "label_path": "/home/aryan/Projects/Samanvaya/data/calibrated/20211228/ch2_ohr_ncp_20211228T2209123959_d_img_d18.xml",
+      "file_format": "img",
+      "format": "img",
+      "width": 12000,
+      "height": 79796,
+      "band_count": null,
+      "dtype": "UnsignedByte",
+      "gsd_m": 0.28,
+      "gsd_source": "pds4",
+      "wavelength_min_um": null,
+      "wavelength_max_um": null,
+      "acquisition_time": "2021-12-28T22:09:12.3959Z",
+      "center_lat_deg": -89.57100725000001,
+      "center_lon_deg": 156.01959300000001,
+      "footprint": [
+        [
+          55.564452,
+          -89.923132
+        ],
+        [
+          233.745958,
+          -89.923132
+        ],
+        [
+          233.745958,
+          -89.252796
+        ],
+        [
+          55.564452,
+          -89.252796
+        ]
+      ],
+      "crs": null,
+      "projection": null,
+      "spacecraft": null,
+      "spacecraft_name": null,
+      "sun_azimuth_deg": 152.400416,
+      "sun_elevation_deg": -0.043949,
+      "sun_geometry_source": "pds4",
+      "incidence_angle_deg": null,
+      "emission_angle_deg": null,
+      "phase_angle_deg": null,
+      "fill_value": null,
+      "no_data_value": null,
+      "processing_level": "Calibrated",
+      "product_type": "Product_Observational",
+      "metadata_source": "/home/aryan/Projects/Samanvaya/data/calibrated/20211228/ch2_ohr_ncp_20211228T2209123959_d_img_d18.xml",
+      "identification_method": "pds4_metadata",
+      "label_association_method": "same_stem",
+      "geometry_method": "lat_lon_bounding_box_prefilter",
+      "footprint_status": "APPROXIMATE",
+      "overlap_status": null,
+      "archive": "local authorized data",
+      "source_url": null,
+      "access_mode": "LOCAL",
+      "metadata_timestamp": "2026-09-11T03:27:58+00:00",
+      "sha256": null,
+      "ingestion_status": "local_file_discovered",
+      "status": "validated",
+      "validation_status": "validated",
+      "validation_message": null,
+      "metadata_completeness": "7/8",
+      "path": "/home/aryan/Projects/Samanvaya/data/calibrated/20211228/ch2_ohr_ncp_20211228T2209123959_d_img_d18.img",
+      "classification": "AUTHORIZED_REAL"
+    },
+    {
+      "mission": "Chandrayaan-2",
+      "instrument": "OHRC",
+      "product_id": "urn:isro:isda:ch2_cho.ohr:data_raw:ch2_ohr_nrp_20250612t2031048828_d_img_d18",
+      "image_path": "/home/aryan/Projects/Samanvaya/data/raw/20250612/ch2_ohr_nrp_20250612T2031048828_d_img_d18.img",
+      "label_path": "/home/aryan/Projects/Samanvaya/data/raw/20250612/ch2_ohr_nrp_20250612T2031048828_d_img_d18.xml",
+      "file_format": "img",
+      "format": "img",
+      "width": 12000,
+      "height": 79796,
+      "band_count": null,
+      "dtype": "UnsignedByte",
+      "gsd_m": 0.28,
+      "gsd_source": "pds4",
+      "wavelength_min_um": null,
+      "wavelength_max_um": null,
+      "acquisition_time": "2025-06-12T20:31:04.8828Z",
+      "center_lat_deg": 60.547717750000004,
+      "center_lon_deg": 355.34424375,
+      "footprint": [
+        [
+          355.189332,
+          60.134667
+        ],
+        [
+          355.502099,
+          60.134667
+        ],
+        [
+          355.502099,
+          60.960827
+        ],
+        [
+          355.189332,
+          60.960827
+        ]
+      ],
+      "crs": null,
+      "projection": null,
+      "spacecraft": null,
+      "spacecraft_name": null,
+      "sun_azimuth_deg": 201.213126,
+      "sun_elevation_deg": 28.312566,
+      "sun_geometry_source": "pds4",
+      "incidence_angle_deg": null,
+      "emission_angle_deg": null,
+      "phase_angle_deg": null,
+      "fill_value": null,
+      "no_data_value": null,
+      "processing_level": "Raw",
+      "product_type": "Product_Observational",
+      "metadata_source": "/home/aryan/Projects/Samanvaya/data/raw/20250612/ch2_ohr_nrp_20250612T2031048828_d_img_d18.xml",
+      "identification_method": "pds4_metadata",
+      "label_association_method": "same_stem",
+      "geometry_method": "lat_lon_bounding_box_prefilter",
+      "footprint_status": "APPROXIMATE",
+      "overlap_status": null,
+      "archive": "local authorized data",
+      "source_url": null,
+      "access_mode": "LOCAL",
+      "metadata_timestamp": "2026-09-11T03:27:58+00:00",
+      "sha256": null,
+      "ingestion_status": "local_file_discovered",
+      "status": "validated",
+      "validation_status": "validated",
+      "validation_message": null,
+      "metadata_completeness": "7/8",
+      "path": "/home/aryan/Projects/Samanvaya/data/raw/20250612/ch2_ohr_nrp_20250612T2031048828_d_img_d18.img",
+      "classification": "AUTHORIZED_REAL"
+    }
+  ]
+}

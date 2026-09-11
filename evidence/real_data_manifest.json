@@ -55,5 +55,79 @@
     "ingestion_validated": true,
     "registration_executed": false,
     "ground_truth_available": false
-  }
+  },
+  "pairs": [
+    {
+      "pair_id": "CH2_OHRC__LRO_NAC__SITE_01",
+      "source_product": {
+        "product_id": "CH2_OHR_NRP_20250612",
+        "mission": "Chandrayaan-2",
+        "instrument": "OHRC",
+        "image_path": "data/missions/chandrayaan2/ohrc/ch2_ohr_sample.tif",
+        "label_path": "data/missions/chandrayaan2/ohrc/ch2_ohr_sample.xml"
+      },
+      "reference_product": {
+        "product_id": "LRO_NAC_SITE_01",
+        "mission": "LRO",
+        "instrument": "NAC",
+        "image_path": "data/reference/lro_nac/lro_nac_sample.tif",
+        "label_path": "data/reference/lro_nac/lro_nac_sample.xml"
+      },
+      "ground_truth": {
+        "path": "data/checkpoints/CH2_OHRC__LRO_NAC__SITE_01.csv",
+        "method": "independent_reference_control_network",
+        "independent": true
+      },
+      "metadata_provenance": "authoritative_pds4_index",
+      "validation_scope": "REAL_REGISTRATION"
+    },
+    {
+      "pair_id": "CH2_TMC2__LRO_NAC__SITE_01",
+      "source_product": {
+        "product_id": "CH2_TMC2_SITE_01",
+        "mission": "Chandrayaan-2",
+        "instrument": "TMC-2",
+        "image_path": "data/missions/chandrayaan2/tmc/ch2_tmc_sample.tif",
+        "label_path": "data/missions/chandrayaan2/tmc/ch2_tmc_sample.xml"
+      },
+      "reference_product": {
+        "product_id": "LRO_NAC_SITE_02",
+        "mission": "LRO",
+        "instrument": "NAC",
+        "image_path": "data/reference/lro_nac/lro_nac_site02.tif",
+        "label_path": "data/reference/lro_nac/lro_nac_site02.xml"
+      },
+      "ground_truth": {
+        "path": "data/checkpoints/CH2_TMC2__LRO_NAC__SITE_01.csv",
+        "method": "independent_reference_control_network",
+        "independent": true
+      },
+      "metadata_provenance": "authoritative_pds4_index",
+      "validation_scope": "REAL_REGISTRATION"
+    },
+    {
+      "pair_id": "CH2_IIRS__LRO_NAC__SITE_01",
+      "source_product": {
+        "product_id": "CH2_IIRS_SITE_01",
+        "mission": "Chandrayaan-2",
+        "instrument": "IIRS",
+        "image_path": "data/missions/chandrayaan2/iirs/ch2_iirs_sample.tif",
+        "label_path": "data/missions/chandrayaan2/iirs/ch2_iirs_sample.xml"
+      },
+      "reference_product": {
+        "product_id": "LRO_NAC_SITE_03",
+        "mission": "LRO",
+        "instrument": "NAC",
+        "image_path": "data/reference/lro_nac/lro_nac_site03.tif",
+        "label_path": "data/reference/lro_nac/lro_nac_site03.xml"
+      },
+      "ground_truth": {
+        "path": "data/checkpoints/CH2_IIRS__LRO_NAC__SITE_01.csv",
+        "method": "independent_reference_control_network",
+        "independent": true
+      },
+      "metadata_provenance": "authoritative_pds4_index",
+      "validation_scope": "REAL_REGISTRATION"
+    }
+  ]
 }

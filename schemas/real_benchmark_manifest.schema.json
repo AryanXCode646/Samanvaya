@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://samanvaya.local/schemas/real_benchmark_manifest.schema.json",
+  "title": "Samanvaya real benchmark manifest",
+  "type": "object",
+  "required": ["schema_version", "validation_scope", "pairs"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "validation_scope": {
+      "type": "string",
+      "enum": ["REAL_DATA_INGESTION", "REAL_REGISTRATION", "INDEPENDENT_VALIDATION"]
+    },
+    "generated_at": {"type": "string", "format": "date-time"},
+    "repository_commit": {"type": "string"},
+    "pairs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/pair"}
+    }
+  },
+  "$defs": {
+    "product": {
+      "type": "object",
+      "required": ["product_id", "mission", "instrument", "image_path"],
+      "properties": {
+        "product_id": {"type": "string"},
+        "mission": {"type": "string"},
+        "instrument": {"type": "string"},
+        "image_path": {"type": "string"},
+        "label_path": {"type": ["string", "null"]},
+        "acquisition_time": {"type": ["string", "null"], "format": "date-time"},
+        "gsd_m": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "band_count": {"type": ["integer", "null"], "minimum": 1},
+        "footprint_status": {"type": "string"},
+        "metadata_provenance": {"type": ["string", "null"]},
+        "sha256": {"type": ["string", "null"]}
+      }
+    },
+    "ground_truth": {
+      "type": ["object", "null"],
+      "properties": {
+        "path": {"type": "string"},
+        "method": {"type": "string"},
+        "independent": {"type": "boolean"}
+      }
+    },
+    "pair": {
+      "type": "object",
+      "required": ["pair_id", "source_product", "reference_product", "ground_truth"],
+      "properties": {
+        "pair_id": {"type": "string"},
+        "source_product": {"$ref": "#/$defs/product"},
+        "reference_product": {"$ref": "#/$defs/product"},
+        "ground_truth": {"$ref": "#/$defs/ground_truth"},
+        "metadata_provenance": {"type": "string"},
+        "validation_scope": {"type": "string"}
+      }
+    }
+  }
+}

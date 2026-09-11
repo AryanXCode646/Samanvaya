@@ -67,6 +67,16 @@ def test_projective_rmse_computation():
     assert rmse < 0.40  # Passes ISRO sub-pixel mandate
 
 
+def test_spatial_quality_reports_coverage_and_distribution_status():
+    points = np.array([
+        [5.0, 5.0], [95.0, 5.0], [5.0, 95.0], [95.0, 95.0],
+    ])
+    quality = EvaluationEngine.compute_spatial_quality(points, (100, 100), grid_bins=4)
+    assert quality["occupied_grid_ratio"] == pytest.approx(0.25)
+    assert quality["spatial_coverage_ratio"] == pytest.approx(0.81)
+    assert quality["spatial_quality_status"] == "PARTIAL_COVERAGE"
+
+
 def test_spatial_distribution_uniformity_entropy():
     """Verifies 2D Shannon Spatial Entropy quantifies feature clumping vs uniformity."""
     shape = (100, 100)

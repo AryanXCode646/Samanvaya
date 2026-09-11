@@ -23,6 +23,15 @@ __all__ = [
     "scan",
     "load_dataset_manifest",
     "summarize_dataset_status",
+    "MissionArchiveStatus",
+    "check_archive",
+    "latest_product",
+    "scan_local_chandrayaan2",
+    "discover_products",
+    "discover_mission_products",
+    "discover_reference_products",
+    "discover_benchmark_pairs",
+    "inventory_products",
 ]
 
 
@@ -82,4 +91,36 @@ def __getattr__(name: str) -> Any:
         if name == "ProductPair":
             return ProductPair
         return propose_pair
+    if name in {"MissionArchiveStatus", "check_archive", "latest_product", "scan_local_chandrayaan2"}:
+        from lunar_core.data_io.archive_status import (
+            MissionArchiveStatus,
+            check_archive,
+            latest_product,
+            scan_local_chandrayaan2,
+        )
+
+        mapping = {
+            "MissionArchiveStatus": MissionArchiveStatus,
+            "check_archive": check_archive,
+            "latest_product": latest_product,
+            "scan_local_chandrayaan2": scan_local_chandrayaan2,
+        }
+        return mapping[name]
+    if name in {"discover_products", "discover_mission_products", "discover_reference_products", "discover_benchmark_pairs", "inventory_products"}:
+        from lunar_core.data_io.discovery import (
+            discover_benchmark_pairs,
+            discover_mission_products,
+            discover_products,
+            discover_reference_products,
+            inventory_products,
+        )
+
+        mapping = {
+            "discover_products": discover_products,
+            "discover_mission_products": discover_mission_products,
+            "discover_reference_products": discover_reference_products,
+            "discover_benchmark_pairs": discover_benchmark_pairs,
+            "inventory_products": inventory_products,
+        }
+        return mapping[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
