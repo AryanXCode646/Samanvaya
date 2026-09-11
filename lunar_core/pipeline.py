@@ -106,13 +106,32 @@ class LunarCorePipeline:
             logger.warning("Dense LoFTR failed with a memory error; switching to Classical RIFT fallback: %s", exc)
             initial_matches = []
 
-        # Map ROI matches back to global reference image space
+        # Map matcher coordinates from the common aligned ROI back to each original image.
+        # The target ROI is not in the reference frame: undo coarse alignment first.
         xmin, ymin = roi.ref_bbox[0], roi.ref_bbox[1]
+        target_from_common = np.linalg.inv(roi.target_to_common)
+
+        def common_to_target_full(x: float, y: float) -> tuple[float, float]:
+            point = target_from_common @ np.array([x + xmin, y + ymin, 1.0], dtype=np.float64)
+            point /= point[2]
+            return (
+                float(point[0] * roi.target_common_to_full_scale),
+                float(point[1] * roi.target_common_to_full_scale),
+            )
+
+        def common_to_reference_full(x: float, y: float) -> tuple[float, float]:
+            return (
+                float((x + xmin) * roi.reference_common_to_full_scale),
+                float((y + ymin) * roi.reference_common_to_full_scale),
+            )
+
         global_matches: List[KeypointMatch] = [
             KeypointMatch(
-                ref_xy=(m.ref_xy[0] + xmin, m.ref_xy[1] + ymin),
-                target_xy=(m.target_xy[0] + xmin, m.target_xy[1] + ymin),
+                ref_xy=common_to_reference_full(m.ref_xy[0], m.ref_xy[1]),
+                target_xy=common_to_target_full(m.target_xy[0], m.target_xy[1]),
                 confidence=m.confidence,
+                source_frame="FULL_SOURCE_IMAGE",
+                reference_frame="FULL_REFERENCE_IMAGE",
             )
             for m in initial_matches
         ]
@@ -148,8 +167,8 @@ class LunarCorePipeline:
             refined_inliers = self.subpixel_refiner.refine_matches_batch(
                 inliers, pc_ref.max_moment, pc_tgt.max_moment, patch_radius=6
             )
-            src_pts = np.array([m.ref_xy for m in refined_inliers], dtype=np.float32)
-            dst_pts = np.array([m.target_xy for m in refined_inliers], dtype=np.float32)
+            src_pts = np.array([m.target_xy for m in refined_inliers], dtype=np.float32)
+            dst_pts = np.array([m.ref_xy for m in refined_inliers], dtype=np.float32)
 
             if self.trans_type == TransformationType.AFFINE:
                 refined_mat, _ = cv2.estimateAffine2D(src_pts, dst_pts)
@@ -161,7 +180,7 @@ class LunarCorePipeline:
                     if np.sum(sub_mask) >= 4:
                         final_src = src_pts[sub_mask]
                         final_dst = dst_pts[sub_mask]
-                        final_mat, _ = cv2.estimateAffine2D(final_src, final_dst)
+                        final_mat, _ = cv2.estimateAffine2D(final_src, final_dst, method=cv2.LMEDS)
                         if final_mat is not None:
                             refined_mat = final_mat
                             src_h_sub = np.hstack([final_src, np.ones((len(final_src), 1), dtype=np.float32)])
@@ -175,6 +194,8 @@ class LunarCorePipeline:
                                     confidence=refined_inliers[idx].confidence,
                                     subpixel_refined=True,
                                     residual_error=float(res_sub[k]),
+                                    source_frame="FULL_SOURCE_IMAGE",
+                                    reference_frame="FULL_REFERENCE_IMAGE",
                                 )
                                 for k, idx in enumerate(sub_indices)
                             ]
@@ -183,7 +204,18 @@ class LunarCorePipeline:
                 refined_mat, _ = cv2.findHomography(src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=1.5)
                 if refined_mat is not None:
                     matrix = refined_mat
-                    inliers = refined_inliers
+                    inliers = [
+                        KeypointMatch(
+                            ref_xy=m.ref_xy,
+                            target_xy=m.target_xy,
+                            confidence=m.confidence,
+                            subpixel_refined=True,
+                            residual_error=m.residual_error,
+                            source_frame="FULL_SOURCE_IMAGE",
+                            reference_frame="FULL_REFERENCE_IMAGE",
+                        )
+                        for m in refined_inliers
+                    ]
 
 
         # Step 8: Warping target into reference coordinate frame

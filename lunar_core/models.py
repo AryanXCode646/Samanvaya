@@ -88,6 +88,8 @@ class KeypointMatch:
     sigma_y: Optional[float] = None
     cov_xy: Optional[float] = None
     weight: Optional[float] = None
+    source_frame: str = "FULL_SOURCE_IMAGE"
+    reference_frame: str = "FULL_REFERENCE_IMAGE"
 
 
 @dataclass

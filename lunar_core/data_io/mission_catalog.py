@@ -7,6 +7,7 @@ import csv
 import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
+from datetime import datetime, timezone
 
 from lunar_core.data_io.mission_product import IdentificationMethod, MissionProduct, ProductStatus
 from lunar_core.data_io.product_identity import (
@@ -74,6 +75,21 @@ def _header_metadata(image_path: Path, label_root: Any) -> dict[str, Any]:
         }
 
 
+def _label_dimensions(label_root: Any) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    if label_root is None:
+        return None, None, None
+    values = []
+    for node in label_root.iter():
+        if _tag_name(node) == "elements" and node.text:
+            try:
+                values.append(int(node.text.strip()))
+            except ValueError:
+                continue
+    if not values:
+        return None, None, None
+    return values[-1], values[-2] if len(values) > 1 else None, values[-3] if len(values) > 2 else None
+
+
 def _center_coordinates(label_root: Any) -> tuple[Optional[float], Optional[float]]:
     """Average explicit latitude/longitude corner fields when a label provides them."""
     latitudes: list[float] = []
@@ -139,6 +155,10 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
         identification_method=IdentificationMethod.UNKNOWN.value,
         label_association_method=resolution.method.value if resolution.method else None,
         status=ProductStatus.DISCOVERED,
+        archive="local authorized data",
+        access_mode="LOCAL",
+        ingestion_status="local_file_discovered",
+        metadata_timestamp=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     )
     detached = image_path.suffix.lower() in {".img", ".qub"}
     if label_path is None and detached:
@@ -157,6 +177,23 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
         for key, value in header.items():
             setattr(product, key, value)
         if label_root is not None:
+            label_width, label_height, label_bands = _label_dimensions(label_root)
+            if image_path.suffix.lower() in {".tif", ".tiff"} and label_width and label_height:
+                if (product.width, product.height) != (label_width, label_height):
+                    product.status = ProductStatus.INVALID
+                    product.validation_status = ProductStatus.INVALID.value
+                    product.validation_message = (
+                        f"Raster dimensions {product.width}x{product.height} disagree with label dimensions "
+                        f"{label_width}x{label_height}."
+                    )
+                    return product
+            if label_bands and product.band_count and label_bands != product.band_count:
+                product.status = ProductStatus.INVALID
+                product.validation_status = ProductStatus.INVALID.value
+                product.validation_message = (
+                    f"Raster band count {product.band_count} disagrees with label band count {label_bands}."
+                )
+                return product
             product.product_id = _first_value(
                 label_root, "product_id", "product_identifier", "logical_identifier", "product_name"
             ) or product.product_id
@@ -182,6 +219,9 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
                 product.sun_geometry_source = "unknown"
             product.center_lat_deg, product.center_lon_deg = _center_coordinates(label_root)
             product.footprint = _footprint_from_coordinates(label_root)
+            if product.footprint is not None:
+                product.footprint_status = "APPROXIMATE"
+                product.geometry_method = "lat_lon_bounding_box_prefilter"
             product.metadata_source = str(label_path)
             product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
             product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)

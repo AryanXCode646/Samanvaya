@@ -1,0 +1,50 @@
+{
+  "EXAMPLE_CONFIGURATION_NOT_VALIDATED_DATA": true,
+  "schema_version": "1.0",
+  "validation_scope": "REAL_REGISTRATION",
+  "pairs": [
+    {
+      "pair_id": "CH2_OHRC__LRO_NAC__SITE_01",
+      "source_product": {
+        "product_id": "REPLACE_WITH_INSPECTED_PRODUCT_ID",
+        "mission": "Chandrayaan-2",
+        "instrument": "OHRC",
+        "image_path": "data/missions/chandrayaan2/ohrc/REPLACE_WITH_AUTHORIZED_PRODUCT.tif",
+        "label_path": "data/missions/chandrayaan2/ohrc/REPLACE_WITH_AUTHORIZED_PRODUCT.xml"
+      },
+      "reference_product": {
+        "product_id": "REPLACE_WITH_INSPECTED_REFERENCE_ID",
+        "mission": "LRO",
+        "instrument": "NAC",
+        "image_path": "data/reference/lro_nac/REPLACE_WITH_AUTHORIZED_REFERENCE.tif",
+        "label_path": "data/reference/lro_nac/REPLACE_WITH_AUTHORIZED_REFERENCE.xml"
+      },
+      "ground_truth": {
+        "path": "data/checkpoints/CH2_OHRC__LRO_NAC__SITE_01.csv",
+        "method": "independent_reference_control_network",
+        "independent": true
+      },
+      "ground_truth_provenance": "REPLACE_WITH_CURATOR_AND_METHOD",
+      "expected_scale_ratio": null,
+      "expected_illumination_metadata": null
+    },
+    {
+      "pair_id": "CH2_TMC2__LRO_NAC__SITE_01",
+      "source_product": {"product_id": "REPLACE", "mission": "Chandrayaan-2", "instrument": "TMC-2", "image_path": "data/missions/chandrayaan2/tmc/REPLACE", "label_path": "data/missions/chandrayaan2/tmc/REPLACE.xml"},
+      "reference_product": {"product_id": "REPLACE", "mission": "LRO", "instrument": "NAC", "image_path": "data/reference/lro_nac/REPLACE", "label_path": "data/reference/lro_nac/REPLACE.xml"},
+      "ground_truth": null,
+      "ground_truth_provenance": null,
+      "expected_scale_ratio": null,
+      "expected_illumination_metadata": null
+    },
+    {
+      "pair_id": "CH2_IIRS__LRO_NAC__SITE_01",
+      "source_product": {"product_id": "REPLACE", "mission": "Chandrayaan-2", "instrument": "IIRS", "image_path": "data/missions/chandrayaan2/iirs/REPLACE", "label_path": "data/missions/chandrayaan2/iirs/REPLACE.xml"},
+      "reference_product": {"product_id": "REPLACE", "mission": "LRO", "instrument": "NAC", "image_path": "data/reference/lro_nac/REPLACE", "label_path": "data/reference/lro_nac/REPLACE.xml"},
+      "ground_truth": null,
+      "ground_truth_provenance": null,
+      "expected_scale_ratio": null,
+      "expected_illumination_metadata": null
+    }
+  ]
+}

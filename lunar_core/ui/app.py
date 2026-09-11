@@ -34,6 +34,14 @@ from lunar_core.preprocessing.photometric import PhotometricNormalizer
 from lunar_core.evaluation.metrics import EvaluationEngine, RegistrationEvaluationReport
 from lunar_core.data_io.synthetic_generator import LunarTerrainSimulator
 from lunar_core.data_io.raster_reader import PlanetaryRasterReader
+from lunar_core.data_io.archive_status import (
+    OFFICIAL_ARCHIVES,
+    MissionArchiveStatus,
+    check_archive,
+    latest_product,
+    scan_local_chandrayaan2,
+    status_with_local_products,
+)
 
 
 # Configure Streamlit Page
@@ -389,8 +397,8 @@ def data_type_label_for_key(selected_key: str) -> str:
     if selected_key == "custom_upload":
         return "REAL MISSION DATA"
     if selected_key == "synthetic_sim":
-        return "SYNTHETIC BENCHMARK"
-    return "SYNTHETIC BENCHMARK"
+        return "DEMO / SYNTHETIC"
+    return "DEMO / SYNTHETIC"
 
 
 def format_unknown(value, default: str = "Unknown") -> str:
@@ -399,6 +407,87 @@ def format_unknown(value, default: str = "Unknown") -> str:
     if isinstance(value, str):
         return value if value.strip() else default
     return str(value)
+
+
+def preview_for_display(image: Optional[np.ndarray], max_side: int = 1200) -> Optional[np.ndarray]:
+    """Downsample display imagery without changing the scientific input array."""
+    if image is None:
+        return None
+    arr = np.asarray(image)
+    if arr.ndim < 2:
+        return None
+    height, width = arr.shape[:2]
+    scale = min(1.0, max_side / max(height, width))
+    if scale == 1.0:
+        return arr
+    return cv2.resize(arr, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
+
+
+def render_image_panel(
+    title: str,
+    state_label: str,
+    image: Optional[np.ndarray],
+    caption: str,
+    data_type: str,
+) -> None:
+    """Render a truthful, aspect-preserving image panel for the main workspace."""
+    st.markdown(f"#### {title}")
+    st.caption(f"{state_label} · {data_type}")
+    if image is None:
+        st.info(caption)
+        return
+    preview = preview_for_display(image)
+    st.image(preview, caption=caption, width="stretch")
+    st.caption(f"Preview resolution: {preview.shape[1]} × {preview.shape[0]} px")
+
+
+def clear_registration_state() -> None:
+    """Discard outputs that belong to a previous image pair or configuration."""
+    for key in (
+        "result_report",
+        "inliers",
+        "raw_matches",
+        "homography",
+        "matcher_path",
+        "warped_source",
+        "img_source",
+        "img_ref",
+        "backend_trace",
+        "last_run_summary",
+    ):
+        st.session_state.pop(key, None)
+
+
+def load_local_demo_evidence() -> dict:
+    """Load the locally verified benchmark summary if it exists."""
+    evidence_path = _PROJECT_ROOT / "output" / "demo_run" / "samanvaya_evaluation_report.json"
+    if not evidence_path.exists():
+        return {}
+    try:
+        with evidence_path.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def scan_local_products_cached(root: str) -> list[dict]:
+    """Cache metadata-only local discovery, never raster arrays."""
+    path = Path(root)
+    if not path.exists():
+        return []
+    return [product.to_dict() for product in scan_local_chandrayaan2(path)]
+
+
+def product_from_dict(record: dict) -> object:
+    """Rehydrate a catalog record for UI selection without broad model coupling."""
+    from lunar_core.data_io.mission_product import MissionProduct
+
+    values = dict(record)
+    for key in ("image_path", "label_path"):
+        if values.get(key):
+            values[key] = Path(values[key])
+    return MissionProduct(**{key: value for key, value in values.items() if key in MissionProduct.__dataclass_fields__})
 
 
 def render_workflow_steps(active_index: int = 1) -> None:
@@ -550,6 +639,8 @@ def render_tie_point_correspondences(
 # Sidebar Configuration & Mission Evaluation Benchmarks
 # -----------------------------------------------------------------------------
 
+local_demo = load_local_demo_evidence()
+
 st.sidebar.header("MODE")
 st.sidebar.caption("Scientifically honest workflow selection")
 mode_choice = st.sidebar.radio("Data source", ["Real Mission Data", "Synthetic / Benchmark"], index=0 if selected_key == "custom_upload" else 1, horizontal=False)
@@ -568,6 +659,14 @@ st.sidebar.markdown("---")
 st.sidebar.header("ABOUT")
 st.sidebar.caption("PS 26166 · Chandrayaan-2 OHRC ↔ lunar reference imagery")
 st.sidebar.caption("Supported missions: Chandrayaan-2, LRO, synthetic benchmark pairs")
+if local_demo.get("summary"):
+    st.sidebar.success(
+        "Local evidence: "
+        f"{local_demo['summary'].get('inlier_count', 0)} inliers | "
+        f"RMSE {local_demo['summary'].get('rmse_pixels', 0.0):.3f}px"
+    )
+else:
+    st.sidebar.info("No local evidence file detected yet; run the CLI benchmark to populate this panel.")
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Reset backend state", use_container_width=True):
@@ -604,8 +703,17 @@ selected_benchmark = st.sidebar.selectbox(
 )
 selected_key = benchmark_options[selected_benchmark]
 
-data_type_badge = data_type_label_for_key(selected_key)
+data_type_badge = (
+    "REAL MISSION DATA"
+    if st.session_state.get("mission_source_path")
+    else data_type_label_for_key(selected_key)
+)
 summary_badge = "SYSTEM READY" if "result_report" not in st.session_state else "RESULT READY"
+summary_badge = (
+    f"EVIDENCE: RMSE {local_demo.get('summary', {}).get('rmse_pixels', 0.0):.3f}px"
+    if local_demo.get("summary")
+    else summary_badge
+)
 
 st.markdown(
     f"""
@@ -630,6 +738,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+if local_demo.get("summary"):
+    st.caption(
+        "Local benchmark evidence: "
+        f"{local_demo['summary'].get('inlier_count', 0)} inliers, "
+        f"{local_demo['summary'].get('inlier_ratio_percent', 0.0):.1f}% inlier ratio, "
+        f"RMSE {local_demo['summary'].get('rmse_pixels', 0.0):.3f}px."
+    )
 
 st.sidebar.markdown("---")
 st.sidebar.header("PAIR DISCOVERY")
@@ -667,6 +783,81 @@ if selected_key == "custom_upload":
     uploaded_src_xml = st.sidebar.file_uploader("Upload Source PDS4 XML (Optional)", type=["xml"], key="source_pds4_xml")
     uploaded_ref_xml = st.sidebar.file_uploader("Upload Reference PDS4 XML (Optional)", type=["xml"], key="reference_pds4_xml")
 
+local_mission_root = _PROJECT_ROOT / "data" / "raw" / "chandrayaan2"
+local_product_records = scan_local_products_cached(str(local_mission_root))
+st.sidebar.markdown("---")
+st.sidebar.header("Latest available mission data")
+st.sidebar.caption("Archive data is not a live camera feed. Archive reachability and local product availability are shown separately.")
+if st.sidebar.button("Refresh official archive status", key="refresh_archive_status", width="stretch"):
+    with st.sidebar.status("Checking official archive...", expanded=False) as archive_check_status:
+        st.session_state["archive_status"] = check_archive()
+        archive_check_status.update(label="Archive status checked", state="complete")
+if st.sidebar.button("Scan local mission data", key="scan_local_mission_data", width="stretch"):
+    scan_local_products_cached.clear()
+    st.rerun()
+
+local_products = [product_from_dict(record) for record in local_product_records]
+selected_local_product = None
+if local_products:
+    instrument_options = ["All"] + sorted({product.instrument for product in local_products if product.instrument})
+    selected_instrument = st.sidebar.selectbox("Instrument", instrument_options, key="mission_instrument_filter")
+    visible_products = [
+        product for product in local_products
+        if selected_instrument == "All" or product.instrument == selected_instrument
+    ]
+    local_product_ids = [product.product_id or str(product.image_path) for product in visible_products]
+    selected_product_id = st.sidebar.selectbox(
+        "Authorized local product",
+        ["None"] + local_product_ids,
+        key="selected_local_product_id",
+    )
+    selected_local_product = next(
+        (product for product in visible_products if (product.product_id or str(product.image_path)) == selected_product_id),
+        None,
+    )
+    if selected_local_product is not None and (selected_local_product.band_count or 0) > 1:
+        st.sidebar.warning("IIRS/spectral cube detected. Spectral-to-2-D registration preview is not implemented for this product.")
+    if st.sidebar.button(
+        "Use selected product as source",
+        key="use_local_mission_source",
+        width="stretch",
+        disabled=selected_local_product is None or (selected_local_product.band_count or 0) > 1,
+    ) and selected_local_product:
+        st.session_state["mission_source_path"] = str(selected_local_product.image_path)
+        clear_registration_state()
+        st.rerun()
+else:
+    st.sidebar.caption(f"No authorized Chandrayaan-2 products found under {local_mission_root}.")
+
+archive_status: Optional[MissionArchiveStatus] = st.session_state.get("archive_status")
+if archive_status is None:
+    archive_status = MissionArchiveStatus(
+        source="ISRO / ISSDC",
+        mission="Chandrayaan-2",
+        last_checked="Not checked",
+        latest_product_id=None,
+        latest_acquisition_time=None,
+        availability="NOT_CHECKED",
+        access_mode="official archive; user authentication may be required",
+        message="Refresh checks official archive reachability. It does not bypass login or download products.",
+        official_url=OFFICIAL_ARCHIVES["Chandrayaan-2 PRADAN"],
+    )
+archive_status = status_with_local_products(archive_status, local_products)
+
+st.markdown("## Latest available mission data")
+status_col, action_col = st.columns([2, 1])
+with status_col:
+    st.caption("Truthful archive status for Chandrayaan-2. Product downloads remain user-authorized.")
+    st.write(f"**{archive_status.availability}** · {archive_status.message}")
+    st.write(f"Mission: {archive_status.mission} · Source: {archive_status.source}")
+    st.write(f"Archive checked: {archive_status.last_checked}")
+    st.write(f"Latest local product: {archive_status.latest_product_id or 'Not available'}")
+    st.write(f"Mission acquired: {archive_status.latest_acquisition_time or 'Not available'}")
+with action_col:
+    st.link_button("Open official ISSDC archive", OFFICIAL_ARCHIVES["Chandrayaan-2 PRADAN"], width="stretch")
+    st.link_button("Open Chandrayaan Data Explorer", OFFICIAL_ARCHIVES["Chandrayaan Data Explorer"], width="stretch")
+    st.caption("Use the official authenticated portal to download products, then scan them locally.")
+
 conf_thresh = st.session_state.get("ui_conf_thresh", 0.15)
 anms_cap = st.session_state.get("ui_anms_cap", 4)
 enable_subpixel = st.session_state.get("ui_enable_subpixel", True)
@@ -678,6 +869,15 @@ conf_thresh = st.sidebar.slider("LoFTR Confidence Threshold (τ)", 0.05, 0.90, c
 anms_cap = st.sidebar.slider("ANMS Cap per Cell (8x8 Grid)", 1, 12, anms_cap, step=1, key="ui_anms_cap")
 enable_subpixel = st.sidebar.checkbox("2D Parabolic Taylor Sub-Pixel Peak Refinement", value=enable_subpixel, key="ui_enable_subpixel")
 magsac_thresh = st.sidebar.slider("USAC-MAGSAC++ Reprojection Threshold (px)", 0.5, 3.0, magsac_thresh, step=0.25, key="ui_magsac_thresh")
+
+source_identity = getattr(uploaded_src, "name", "") if uploaded_src is not None else st.session_state.get("mission_source_path", selected_key)
+reference_identity = getattr(uploaded_ref, "name", "") if uploaded_ref is not None else selected_key
+registration_fingerprint = repr(
+    (source_identity, reference_identity, selected_key, conf_thresh, anms_cap, enable_subpixel, magsac_thresh)
+)
+if st.session_state.get("registration_fingerprint") not in (None, registration_fingerprint):
+    clear_registration_state()
+st.session_state["registration_fingerprint"] = registration_fingerprint
 
 # -----------------------------------------------------------------------------
 # Ingestion & Data Preparation
@@ -697,7 +897,29 @@ sun_ref: Optional[SunAngles] = None
 src_gsd = 1.0
 ref_gsd = 1.0
 
-if selected_key in ["scenario_a", "scenario_b", "scenario_c"]:
+if st.session_state.get("mission_source_path"):
+    mission_source_path = Path(st.session_state["mission_source_path"])
+    try:
+        img_source = load_geotiff_file(mission_source_path)
+        if selected_key in {"scenario_a", "scenario_b", "scenario_c"}:
+            reference_benchmark = benchmarks.get(selected_key, {}).get("reference", {})
+            reference_path = get_sample_data_dir() / reference_benchmark["filename"]
+            img_ref = load_geotiff_file(reference_path)
+        source_product = next(
+            (product for product in local_products if str(product.image_path) == str(mission_source_path)),
+            None,
+        )
+        if source_product is not None:
+            src_gsd = source_product.gsd_m or 1.0
+            if source_product.sun_azimuth_deg is not None and source_product.sun_elevation_deg is not None:
+                sun_src = SunAngles(source_product.sun_azimuth_deg, source_product.sun_elevation_deg)
+        data_type_badge = "REAL MISSION DATA"
+        st.success(f"Loaded authorized local mission source: {source_product.product_id if source_product else mission_source_path.name}")
+    except Exception as exc:
+        st.error("MISSION PRODUCT COULD NOT BE LOADED")
+        with st.expander("Technical details"):
+            st.code(str(exc))
+elif selected_key in ["scenario_a", "scenario_b", "scenario_c"]:
     bm = benchmarks.get(selected_key, {})
     sample_dir = get_sample_data_dir()
     src_path = sample_dir / bm["source"]["filename"]
@@ -789,6 +1011,70 @@ elif selected_key == "custom_upload":
             st.error(f"Error reading custom imagery or PDS4 metadata: {e}")
     else:
         st.warning("Please upload both Source and Reference GeoTIFFs via the sidebar to execute registration.")
+
+# -----------------------------------------------------------------------------
+# Primary scientific workspace
+# -----------------------------------------------------------------------------
+
+st.markdown("## The registration workspace")
+st.caption("The reference stays fixed. Samanvaya estimates a transform and aligns the moving source to it.")
+
+if img_ref is None:
+    st.info("Select a fixed reference image to begin.")
+elif img_source is None:
+    st.info("Select the moving Chandrayaan-2 image to begin.")
+else:
+    workspace_left, workspace_right = st.columns(2, gap="large")
+    registered_preview = st.session_state.get("warped_source")
+    with workspace_left:
+        render_image_panel(
+            "Reference frame",
+            "FIXED IMAGE",
+            img_ref,
+            "Existing lunar reference used as the alignment target",
+            data_type_badge,
+        )
+    with workspace_right:
+        if registered_preview is not None:
+            render_image_panel(
+                "Registered warped source",
+                "MOVING → ALIGNED TO REFERENCE",
+                registered_preview,
+                "Source after the computed geometric warp",
+                data_type_badge,
+            )
+        else:
+            render_image_panel(
+                "Source image",
+                "MOVING IMAGE",
+                img_source,
+                "Run registration to generate the aligned source",
+                data_type_badge,
+            )
+
+    workflow_cols = st.columns(5)
+    workflow_labels = (
+        "01  Reference + source",
+        "02  Find match points",
+        "03  Estimate transform",
+        "04  Warp source",
+        "05  Verify alignment",
+    )
+    for column, label in zip(workflow_cols, workflow_labels):
+        column.caption(label)
+
+    with st.expander("Image metadata", expanded=False):
+        metadata_left, metadata_right = st.columns(2)
+        with metadata_left:
+            st.markdown("**Reference frame · fixed**")
+            st.write(f"Dimensions: {img_ref.shape[1]} × {img_ref.shape[0]} px")
+            st.write(f"GSD: {ref_gsd:g} m/px" if ref_gsd is not None else "GSD: Not available")
+            st.write("Sun geometry: available" if sun_ref is not None else "Sun geometry: unavailable")
+        with metadata_right:
+            st.markdown("**Source image · moving**")
+            st.write(f"Dimensions: {img_source.shape[1]} × {img_source.shape[0]} px")
+            st.write(f"GSD: {src_gsd:g} m/px" if src_gsd is not None else "GSD: Not available")
+            st.write("Sun geometry: available" if sun_src is not None else "Sun geometry: unavailable")
 
 # -----------------------------------------------------------------------------
 # End-to-End Alignment Pipeline Execution with Progress Bar
@@ -964,24 +1250,41 @@ if "result_report" in st.session_state:
 
     st.markdown("---")
     st.caption(f"Matcher path: {matcher_path}")
-    st.subheader("📊 Planetary Hackathon KPI Metric Scorecards")
+    st.subheader("Registration result")
+    result_status = "SUCCESS" if report.inlier_count >= 4 and H is not None else "LOW CONFIDENCE"
+    if report.inlier_count == 0 or H is None:
+        result_status = "FAILED"
+    st.markdown(f"**Status: {result_status}** · {data_type_badge}")
 
-    # 5 KPI Metric Scorecards
-    col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
+    # Every metric below is produced by the evaluation backend.
+    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+    raw_match_count = len(st.session_state.get("raw_matches", []))
     col_k1.metric(
-        "Sub-Pixel RMSE",
+        "Reprojection RMSE",
         f"{report.rmse_pixels:.3f} px",
         delta=f"{report.rmse_pixels - 0.40:.3f} vs 0.40 px target",
         delta_color="inverse",
     )
-    col_k2.metric("Inlier Count", f"{report.inlier_count} pts")
-    col_k3.metric("Inlier Ratio", f"{report.inlier_ratio_percent:.1f}%")
-    col_k4.metric(
-        "Spatial Entropy",
-        f"{report.spatial_uniformity_entropy:.3f} / 1.0",
-        help="2D Shannon Spatial Entropy across 8x8 grid (1.0 = optimal non-clumping across crater rims)",
+    col_k2.metric("Raw matches", f"{raw_match_count} pts")
+    col_k3.metric("Inliers", f"{report.inlier_count} pts")
+    col_k4.metric("Inlier ratio", f"{report.inlier_ratio_percent:.1f}%")
+
+    col_k5, col_k6, col_k7, col_k8 = st.columns(4)
+    col_k5.metric("Spatial coverage", f"{report.spatial_uniformity_entropy:.3f} / 1.0")
+    col_k6.metric("Runtime", f"{report.processing_time_ms:.1f} ms")
+    col_k7.metric(
+        "Ground-truth RMSE",
+        f"{report.control_point_rmse_pixels:.3f} px" if report.control_point_rmse_pixels is not None else "Not available",
     )
-    col_k5.metric("Pipeline Latency", f"{report.processing_time_ms:.1f} ms")
+    col_k8.metric("Tie points", f"{len(report.tie_points)}")
+
+    with st.expander("How the source was aligned", expanded=False):
+        st.write("Source: Moving image")
+        st.write("Reference: Fixed image")
+        st.write(f"Transformation matrix: {np.asarray(H).tolist() if H is not None else 'Not available'}")
+        st.write(f"Matcher: {matcher_path}")
+        st.write(f"Subpixel refinement: {'Applied' if any(pt.get('subpixel_refined', False) for pt in report.tie_points) else 'Not available'}")
+        st.write(f"Fallback: {'Classical RIFT' if matcher_path == 'classical_rift' else 'Not used'}")
 
     if report.ground_truth_available and report.meets_isro_mandate:
         st.success("🎯 **Independent ground-truth validation passed**: RMSE < 0.40 px and sufficient inliers were confirmed for this run.")
@@ -993,17 +1296,59 @@ if "result_report" in st.session_state:
     st.subheader("🧠 Backend execution trace")
     st.code("\n".join(backend_trace), language="text")
 
-    # 4 Interactive Inspection Tabs
-    tab_overlap, tab_tiepoints, tab_diagnostics, tab_exports = st.tabs([
-        "🔬 Crater Rim Overlap (Wipe & Checkerboard)",
-        "🔗 Side-by-Side Tie-Point Correspondence Plot",
-        "📈 Residual Error Scatter & Frequency Invariance",
-        "📥 Structured JSON & GIS Tie-Point Export",
+    # Interactive inspection tabs use only backend-produced imagery and points.
+    tab_source, tab_reference, tab_registered, tab_overlap, tab_tiepoints, tab_diagnostics, tab_exports = st.tabs([
+        "Source",
+        "Reference",
+        "Registered",
+        "Overlay",
+        "Match points",
+        "Residuals",
+        "Exports",
     ])
+
+    with tab_source:
+        render_image_panel(
+            "Source image",
+            "MOVING IMAGE",
+            img_source,
+            "Original source before geometric alignment",
+            data_type_badge,
+        )
+
+    with tab_reference:
+        render_image_panel(
+            "Reference frame",
+            "FIXED IMAGE",
+            img_ref,
+            "Fixed image used as the registration target",
+            data_type_badge,
+        )
+
+    with tab_registered:
+        if warped_src is None:
+            st.info("Registration not yet run.")
+        else:
+            render_image_panel(
+                "Registered warped source",
+                "MOVING → ALIGNED TO REFERENCE",
+                warped_src,
+                "Actual warped source produced by the registration backend",
+                data_type_badge,
+            )
 
     # TAB 1: 50/50 Checkerboard Blend and Sliding Wipe Tool
     with tab_overlap:
-        st.markdown("### 🎚️ Interactive Sliding Wipe Tool (Crater Rim Overlap Inspection)")
+        st.markdown("### Reference + registered source")
+        st.caption("Adjust opacity to inspect whether crater rims, ridges, and boundaries coincide.")
+        if warped_src is not None:
+            opacity = st.slider("Registered source opacity", 0, 100, 50, key="registered_opacity")
+            overlay = np.clip((1.0 - opacity / 100.0) * img_ref + (opacity / 100.0) * warped_src, 0.0, 1.0)
+            st.image(moon_preview_image(overlay), caption=f"Reference {100 - opacity}% · Registered source {opacity}%", width="stretch")
+        else:
+            st.info("Run registration to generate the registered-source overlay.")
+
+        st.markdown("### Before → after")
         st.caption("Drag the wipe slider from 0% to 100% across the boundary. Continuous crater boundaries confirm sub-pixel planetary alignment.")
 
         if warped_src is not None:
@@ -1044,12 +1389,16 @@ if "result_report" in st.session_state:
 
     # TAB 2: Interactive Side-by-Side Tie-Point Correspondence Plot
     with tab_tiepoints:
-        st.subheader("🔗 Interactive Tie-Point Correspondence Plot")
-        st.caption("Side-by-side view connecting Source (Left) to Reference (Right), color-coded by LoFTR match confidence.")
+        st.subheader("Match points")
+        st.caption("Match points are common lunar landmarks detected in both images, such as crater rims, ridges, or other distinctive surface features.")
+        st.caption(f"Raw matches: {len(st.session_state.get('raw_matches', []))} · Filtered/inliers shown below: {len(inliers)}")
 
         max_pts = st.slider("Max Tie-Points to Display", 10, 150, 40, step=5)
-        fig_corr = render_tie_point_correspondences(img_source, img_ref, inliers, max_display=max_pts)
-        st.pyplot(fig_corr)
+        if inliers:
+            fig_corr = render_tie_point_correspondences(img_ref, img_source, inliers, max_display=max_pts)
+            st.pyplot(fig_corr)
+        else:
+            st.info("No reliable correspondence points were found.")
 
     # TAB 3: Residual Error Scatter & Frequency Invariance
     with tab_diagnostics:

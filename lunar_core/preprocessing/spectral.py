@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import numpy as np
 
@@ -14,6 +14,11 @@ class SpectralCube:
 
     data: np.ndarray
     fill_value: Optional[float] = None
+    wavelengths: Optional[np.ndarray] = None
+    wavelength_units: Optional[str] = None
+    wavelength_source: str = "WAVELENGTH_METADATA_UNAVAILABLE"
+    axis_order: str = "bands,height,width"
+    metadata_provenance: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.data.ndim != 3:
@@ -24,7 +29,10 @@ class SpectralCube:
         return tuple(int(value) for value in self.data.shape)
 
     def to_image(self, method: str = "band_mean", components: int = 1) -> np.ndarray:
-        selector = HyperspectralBandSelector(wavelengths=np.arange(self.shape[0], dtype=np.float32))
+        selector = HyperspectralBandSelector(
+            wavelengths=self.wavelengths,
+            num_bands=self.shape[0],
+        )
         if method == "band_mean":
             image = np.nanmean(np.asarray(self.data, dtype=np.float32), axis=0)
             return np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
@@ -33,6 +41,24 @@ class SpectralCube:
                 raise ValueError("The registration representation currently supports exactly one PCA component")
             return selector.extract_pca_structural_band(np.asarray(self.data), normalize=False)
         raise ValueError(f"Unsupported spectral representation: {method}")
+
+    def representation_provenance(self, method: str, components: int = 1) -> dict[str, Any]:
+        """Describe exactly how a deterministic 2-D registration image was produced."""
+        return {
+            "input": "IIRS spectral cube",
+            "axis_order": self.axis_order,
+            "bands": self.shape[0],
+            "wavelength_units": self.wavelength_units,
+            "wavelength_source": self.wavelength_source,
+            "wavelength_range": (
+                [float(np.nanmin(self.wavelengths)), float(np.nanmax(self.wavelengths))]
+                if self.wavelengths is not None and len(self.wavelengths)
+                else None
+            ),
+            "representation": method,
+            "components": components if method == "pca" else None,
+            "metadata_provenance": self.metadata_provenance,
+        }
 
 
 class HyperspectralBandSelector:
@@ -53,6 +79,8 @@ class HyperspectralBandSelector:
     ) -> None:
         self.num_bands = num_bands
         if wavelengths is None:
+            # Synthetic/unit-test selector compatibility; real SpectralCube provenance
+            # remains explicitly unavailable unless authoritative wavelengths are passed.
             self.wavelengths = np.linspace(
                 min_wavelength_nm, max_wavelength_nm, num_bands, dtype=np.float32
             )
@@ -64,7 +92,7 @@ class HyperspectralBandSelector:
         arr = np.asarray(cube, dtype=np.float32)
         if arr.ndim != 3:
             raise ValueError(f"Expected 3D hyperspectral cube, got shape {arr.shape}")
-        bands = len(self.wavelengths)
+        bands = len(self.wavelengths) if self.wavelengths is not None else self.num_bands
         if arr.shape[0] == bands:
             return arr
         if arr.shape[2] == bands:
@@ -80,6 +108,8 @@ class HyperspectralBandSelector:
     def get_band_indices_for_range(
         self, min_nm: float = 1000.0, max_nm: float = 1250.0
     ) -> np.ndarray:
+        if self.wavelengths is None:
+            raise ValueError("WAVELENGTH_METADATA_UNAVAILABLE: cannot select a wavelength range")
         indices = np.where((self.wavelengths >= min_nm) & (self.wavelengths <= max_nm))[0]
         if len(indices):
             return indices

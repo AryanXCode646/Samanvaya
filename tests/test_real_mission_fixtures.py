@@ -5,6 +5,7 @@ import numpy as np
 
 from lunar_core.data_io.mission_adapters import adapter_for_mission
 from lunar_core.data_io.mission_catalog import inspect_product
+from lunar_core.data_io.discovery import discover_products, discover_reference_products
 from scripts.register_real_pair import register_pair
 
 
@@ -55,6 +56,52 @@ def test_register_pair_api_is_available():
     import scripts.register_real_pair as module
 
     assert hasattr(module, "register_pair")
+
+
+def test_pds4_label_to_geotiff_product_chain_checks_dimensions(tmp_path: Path):
+    import rasterio
+    from rasterio.transform import from_origin
+
+    image_path = tmp_path / "CH2_OHR_CHAIN.tif"
+    with rasterio.open(
+        image_path,
+        "w",
+        driver="GTiff",
+        height=8,
+        width=8,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:4326",
+        transform=from_origin(0, 8, 1, 1),
+    ) as dataset:
+        dataset.write(np.zeros((1, 8, 8), dtype=np.uint8))
+    image_path.with_suffix(".xml").write_text(
+        """<Product_Observational>
+        <mission_name>Chandrayaan-2</mission_name><instrument_id>OHRC</instrument_id>
+        <product_id>CH2_OHR_CHAIN</product_id><ground_sample_distance>0.28</ground_sample_distance>
+        <Array_2D_Image><Axis_Array><elements>8</elements></Axis_Array><Axis_Array><elements>8</elements></Axis_Array></Array_2D_Image>
+        </Product_Observational>""",
+        encoding="utf-8",
+    )
+
+    product = discover_products(tmp_path)[0]
+
+    assert product.status == "validated"
+    assert product.image_path == image_path
+    assert product.width == 8 and product.height == 8
+    assert product.mission == "Chandrayaan-2"
+    assert product.instrument == "OHRC"
+    assert product.gsd_m == 0.28
+
+
+def test_discovery_keeps_reference_mission_classes_separate(tmp_path: Path):
+    _copy_fixture_to_image("lro_nac_real_metadata.xml", "LRO_LROCNAC_0001.img", tmp_path)
+    _copy_fixture_to_image("ch2_ohr_real_metadata.xml", "CH2_OHR_20250612_0001.img", tmp_path)
+
+    references = discover_reference_products(tmp_path)
+
+    assert references
+    assert all(product.mission in {"LRO", "SELENE"} for product in references)
 
 
 def test_register_pair_accepts_ground_truth_control_points_and_writes_provenance(tmp_path: Path):

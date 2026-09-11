@@ -70,7 +70,14 @@ class MissionProduct:
     identification_method: Optional[str] = None
     label_association_method: Optional[str] = None
     geometry_method: Optional[str] = None
+    footprint_status: str = "UNAVAILABLE"
     overlap_status: Optional[str] = None
+    archive: Optional[str] = None
+    source_url: Optional[str] = None
+    access_mode: Optional[str] = None
+    metadata_timestamp: Optional[str] = None
+    sha256: Optional[str] = None
+    ingestion_status: Optional[str] = None
     status: ProductStatus | str = ProductStatus.DISCOVERED
     validation_status: Optional[str] = None
     validation_message: Optional[str] = None
@@ -86,6 +93,8 @@ class MissionProduct:
             self.spacecraft = self.spacecraft_name
         if self.validation_status is None:
             self.validation_status = self.status
+        if self.footprint is not None and self.footprint_status == "UNAVAILABLE":
+            self.footprint_status = "APPROXIMATE"
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON/CSV-friendly representation with string paths."""

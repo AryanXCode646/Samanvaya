@@ -28,6 +28,11 @@ class RoiBundle:
     coarse_scale: float
     coarse_translation: Tuple[float, float]
     confidence: float
+    target_to_common: np.ndarray
+    reference_common_to_full_scale: float = 1.0
+    target_common_to_full_scale: float = 1.0
+    reference_origin_full: Tuple[float, float] = (0.0, 0.0)
+    target_origin_full: Tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass
@@ -122,6 +127,9 @@ class ScaleSpaceLocalizer:
             coarse_scale=scale_est * scale_ratio,
             coarse_translation=(dx, dy),
             confidence=conf,
+            target_to_common=np.vstack([rot_mat, [0.0, 0.0, 1.0]]).astype(np.float64),
+            reference_common_to_full_scale=scale_ratio if tgt_gsd > ref_gsd else 1.0,
+            target_common_to_full_scale=(1.0 / scale_ratio) if tgt_gsd < ref_gsd else 1.0,
         )
 
 

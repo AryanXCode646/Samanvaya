@@ -26,7 +26,7 @@ Scope note:
 | 13. RMSE | RMSE metrics are computed and exported. | `lunar_core/evaluation/metrics.py`, `lunar_core/models.py` | `tests/test_evaluation_metrics.py`, `tests/test_lunar_core.py` | Synthetic and reprojection-only metrics exist; real independent ground-truth RMSE is not demonstrated. | PARTIAL | Must separate reprojection RMSE from ground-truth RMSE and evaluate using held-out checkpoints. |
 | 14. Inlier count | Inlier count is part of the report and model. | `lunar_core/evaluation/metrics.py`, `lunar_core/models.py` | `tests/test_evaluation_metrics.py`, `tests/test_lunar_core.py` | Synthetic/inlier count is present, but not tied to independent real-data validation. | PARTIAL | Need real inlier counts from real mission pair validation. |
 | 15. Inlier ratio | Inlier ratio is computed for evaluation. | `lunar_core/evaluation/metrics.py`, `lunar_core/models.py` | `tests/test_evaluation_metrics.py`, `tests/test_lunar_core.py` | Synthetic/inlier-ratio benchmarks exist; not mission-validated. | PARTIAL | Need real mission-pair inlier ratio and failure reporting. |
-| 16. Real-data validation | The project contains metadata and lazy-access checks for representative local real-mission fixtures, plus a validation framework and evidence manifests. | `evidence/real_data_manifest.json`, `lunar_core/validation.py`, `validation/validation_matrix.md`, `README.md` | `tests/test_validation_framework.py` | Validated only at the metadata/lazy-access level. End-to-end real registration not executed. | PARTIAL | Need actual registration execution on local authorized real data and, if unavailable, a clear `BLOCKED BY DATA AVAILABILITY` status. |
+| 16. Real-data validation | The project contains metadata/lazy-access checks, a real-pair runner, and held-out checkpoint scoring. Missing raster inputs now produce `BLOCKED_BY_MISSING_DATA` rather than a synthetic fallback. | `evidence/real_data_manifest.json`, `samanvaya/validation/run_real_pair.py`, `samanvaya/validation/evaluate_real_pair.py`, `validation/validation_matrix.md` | `tests/test_validation_framework.py`, `tests/test_real_pair_workflow.py` | This checkout still has no complete real OHRC/TMC/IIRS pair with independent checkpoints. | PARTIAL / BLOCKED BY DATA AVAILABILITY | Supply authorized mission rasters and independent checkpoints, then execute each modality pair. |
 | 17. Reproducibility | CLI and validation harness provide reproducible commands and summary outputs. | `lunar_core/cli.py`, `validation/README.md`, `validation/summary.json` (if present), `README.md` | `tests/test_cli_workflows.py`, `tests/test_validation_framework.py` | Reproducibility is structured for synthetic and metadata workflows, but not for mission-grade end-to-end real-data runs. | PARTIAL | Need real experiment provenance, checksums, config hashes, and exact CLI reproduction steps for real mission pairs. |
 
 ## Consolidated Assessment
@@ -45,6 +45,8 @@ However, the project remains scientifically incomplete with respect to the actua
 3. real IIRS spectral-to-2D correspondence under actual cube metadata,
 4. real LRO/SELENE reference registration, and
 5. independent checkpoint validation that separates fitting points from held-out validation points.
+
+The real-pair runner refuses to substitute synthetic/random arrays when a manifest references unavailable rasters. A run is considered scientific evidence only when the supplied products exist, the transform is recorded, and independent checkpoint residuals are evaluated against that transform.
 
 ## Conclusion
 
