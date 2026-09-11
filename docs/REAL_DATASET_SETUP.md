@@ -1,31 +1,60 @@
-# Real Dataset Setup
+# Real Dataset Setup & Execution Guide
 
-Samanvaya does not download or fabricate mission data. Place authorized products under this layout:
+Samanvaya adheres to a strict scientific rule: **we never fabricate mission imagery, control points, or validation scores**.
+
+When real mission data is not yet downloaded to the local filesystem, Samanvaya transparently reports `DATA_REQUIRED` and refuses to produce fake registration outputs.
+
+---
+
+## 1. Directory Structure
+
+Place all downloaded mission data in the authoritative folder hierarchy:
 
 ```text
 data/
-  missions/chandrayaan2/ohrc/
-  missions/chandrayaan2/tmc/
-  missions/chandrayaan2/iirs/
-  reference/lro_nac/
-  reference/selene/
-  checkpoints/
-  manifests/
+  missions/
+    chandrayaan2/
+      ohrc/           # Calibrated OHRC rasters (*.img, *.tif) + PDS4 labels (*.xml)
+      tmc/            # Calibrated TMC-2 stereo triplet rasters + PDS4 labels
+      iirs/           # IIRS hyperspectral cubes (*.qub, *.img) + PDS4 labels
+  reference/
+    lro_nac/          # NASA LRO NAC GeoTIFFs (*.tif) + PDS labels
+    selene/           # JAXA SELENE TC calibrated rasters
+  checkpoints/        # Independent Ground Control Points (*.csv)
+  manifests/          # Benchmark manifests (*.json)
 ```
 
-Each detached PDS4 raster must have an authoritative associated label. A same-stem XML or explicit `file_name` reference is accepted; an unrelated lone XML file is rejected.
+---
 
-Products must expose mission/instrument identity, product ID, dimensions, band count, acquisition time where available, GSD, and geometry status. IIRS additionally needs authoritative axis and wavelength metadata for spectral claims.
+## 2. Ingestion & Inventory Verification
 
-Use the inventory command before creating a benchmark manifest:
+Before creating a benchmark manifest, verify local products using the inventory command:
 
 ```bash
+# Via Samanvaya CLI
+./.venv/bin/python -m samanvaya inventory \
+  --root data \
+  --output evidence/data_inventory.json
+
+# Or via lunar_core CLI
 ./.venv/bin/python -m lunar_core.cli inventory \
   --root data \
   --output evidence/data_inventory.json
 ```
 
-Discover conservative candidate pairs:
+The inventory scanner inspects every raster header and PDS4 label, classifying each product into:
+1. `AUTHORIZED_REAL`: Real flight data with validated metadata, real raster on disk, recognized mission.
+2. `SYNTHETIC_FIXTURE`: Located in synthetic fixture directories or generated for deterministic unit tests.
+3. `UNVERIFIED`: Real file present on disk, but missing PDS4 label, incomplete metadata, or partial status.
+4. `INVALID`: Parsing failed, corrupted file, zero dimensions, or unsupported data format.
+
+**Only `AUTHORIZED_REAL` products are permitted to enter the real scientific benchmark.**
+
+---
+
+## 3. Candidate Pair Discovery
+
+Discover overlapping candidate pairs between source and reference products:
 
 ```bash
 ./.venv/bin/python -m lunar_core.cli discover-real-pairs \
@@ -33,4 +62,18 @@ Discover conservative candidate pairs:
   --output evidence/discovered_real_pairs.json
 ```
 
-A benchmark manifest must point to actual local rasters and independent checkpoint files. Hashes are recorded in benchmark results; product metadata provenance comes from the PDS4 label or raster metadata. Missing products or checkpoints produce `DATA_REQUIRED` and do not invoke a synthetic fallback.
+---
+
+## 4. Benchmark Execution
+
+Run the real benchmark runner against a populated manifest:
+
+```bash
+./.venv/bin/python -m lunar_core.cli benchmark-real \
+  --manifest evidence/real_data_manifest.json \
+  --output output/real
+```
+
+### Expected Behavior
+* **When physical mission rasters are absent**: Exits cleanly with code `2` and status `DATA_REQUIRED`. Generates `results.json`, `scale_results.csv`, and `illumination_results.csv` recording missing files.
+* **When valid mission rasters are present**: Executes full registration pipeline, outputs `registered_source.tif`, verifies output reopening, computes independent held-out metrics, and generates claim gates.

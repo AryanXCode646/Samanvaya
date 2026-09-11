@@ -229,7 +229,17 @@ def cmd_inventory(args: argparse.Namespace) -> None:
     if getattr(args, "output", None):
         output = Path(args.output).expanduser().resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "products": records}, indent=2, default=str), encoding="utf-8")
+        by_class = {}
+        for r in records:
+            c = str(r.get("classification", "UNVERIFIED"))
+            by_class[c] = by_class.get(c, 0) + 1
+        payload = {
+            "root": str(Path(args.root).resolve()),
+            "total_products": len(records),
+            "by_classification": by_class,
+            "products": records,
+        }
+        output.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     print(json.dumps(records, indent=2, default=str))
 
 

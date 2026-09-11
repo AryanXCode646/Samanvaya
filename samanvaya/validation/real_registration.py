@@ -238,6 +238,7 @@ def _generate_visual_artifacts(
     matches: list[Any],
     inliers: list[Any],
     reg_transform: RegistrationTransform,
+    selected_matches: list[Any] | None = None,
 ) -> None:
     visual_dir.mkdir(parents=True, exist_ok=True)
 
@@ -256,7 +257,7 @@ def _generate_visual_artifacts(
     cv2.imwrite(str(visual_dir / "source.png"), src_u8)
     cv2.imwrite(str(visual_dir / "reference.png"), ref_u8)
 
-    # 2. raw_matches.png & verified_matches.png
+    # 2. raw_matches.png, selected_matches.png & verified_matches.png
     def _draw_matches(pts_src: list[Any], pts_ref: list[Any], out_path: Path) -> None:
         h1, w1 = src_u8.shape[:2]
         h2, w2 = ref_u8.shape[:2]
@@ -273,18 +274,23 @@ def _generate_visual_artifacts(
 
     if matches:
         _draw_matches([m.target_xy for m in matches], [m.ref_xy for m in matches], visual_dir / "raw_matches.png")
+    if selected_matches:
+        _draw_matches([m.target_xy for m in selected_matches], [m.ref_xy for m in selected_matches], visual_dir / "selected_matches.png")
     if inliers:
         _draw_matches([m.target_xy for m in inliers], [m.ref_xy for m in inliers], visual_dir / "verified_matches.png")
 
-    # 3. uniform_matches.png
+    # 3. uniform_matches.png (SIH PS 26166: Primary spatial grid on FULL_SOURCE_IMAGE)
     fig, ax = plt.subplots(figsize=(6, 6))
     if inliers:
-        ref_x = [float(m.ref_xy[0]) for m in inliers]
-        ref_y = [float(m.ref_xy[1]) for m in inliers]
-        ax.scatter(ref_x, ref_y, c="blue", s=15, alpha=0.7)
-    ax.set_xlim(0, max(1, reference.shape[1]))
-    ax.set_ylim(max(1, reference.shape[0]), 0)
-    ax.set_title("Inlier Spatial Distribution (Reference Frame)")
+        src_x = [float(m.target_xy[0]) for m in inliers]
+        src_y = [float(m.target_xy[1]) for m in inliers]
+        ax.scatter(src_x, src_y, c="#1f77b4", s=18, alpha=0.75, edgecolors="none")
+    ax.set_xlim(0, max(1, source.shape[1]))
+    ax.set_ylim(max(1, source.shape[0]), 0)
+    ax.set_title("Inlier Spatial Distribution (FULL_SOURCE_IMAGE Frame)")
+    ax.set_xlabel("Source X / Column (pixels)")
+    ax.set_ylabel("Source Y / Row (pixels)")
+    ax.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
     fig.savefig(visual_dir / "uniform_matches.png", dpi=100)
     plt.close(fig)
@@ -323,7 +329,9 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
             "geometry_method": windows.geometry_method,
         }
     except (OSError, ValueError) as exc:
-        return _missing_result("unassigned", source_id, reference_id, str(exc), provenance)
+        err_msg = str(exc)
+        status_code = "IIRS_REPRESENTATION_UNCERTAIN" if "IIRS_REPRESENTATION_UNCERTAIN" in err_msg else "DATA_REQUIRED"
+        return _missing_result("unassigned", source_id, reference_id, err_msg, provenance, status=status_code)
 
     scale_ratio = None
     if source_product.gsd_m and reference_product.gsd_m and source_product.gsd_m > 0 and reference_product.gsd_m > 0:
@@ -337,6 +345,27 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
     if not source_gsd or not reference_gsd or source_gsd <= 0 or reference_gsd <= 0:
         return _missing_result("unassigned", source_id, reference_id, "INVALID_METADATA: usable GSD is unavailable", provenance)
     scale_ratio = max(source_gsd, reference_gsd) / min(source_gsd, reference_gsd)
+
+    # Phase 14: Cross-modal classification
+    src_inst = str(getattr(source_product, "instrument", "") or "").upper()
+    ref_inst = str(getattr(reference_product, "instrument", "") or "").upper()
+    src_miss = str(getattr(source_product, "mission", "") or "").upper()
+    ref_miss = str(getattr(reference_product, "mission", "") or "").upper()
+
+    if src_inst == "IIRS":
+        modality_class = "SPECTRAL_TO_2D"
+    elif src_inst == ref_inst and src_miss == ref_miss:
+        modality_class = "SAME_MODALITY"
+    elif scale_ratio is not None and scale_ratio > 3.0:
+        modality_class = "MULTIRESOLUTION"
+    else:
+        modality_class = "CROSS_MODALITY"
+
+    provenance["modality_classification"] = modality_class
+    provenance["spectral_representation"] = windows.spectral_representation
+    if windows.spectral_provenance:
+        provenance["spectral_provenance"] = windows.spectral_provenance
+
     ref_sun = None
     source_sun = None
     if reference_product.sun_azimuth_deg is not None and reference_product.sun_elevation_deg is not None:
@@ -629,18 +658,21 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
     }
     (output_path / "coordinate_audit.json").write_text(json.dumps(coord_audit, indent=2), encoding="utf-8")
 
-    spatial_dist = {
-        "spatial_uniformity_entropy": result.metrics.spatial_uniformity_entropy,
-        "coverage_fraction": result.metrics.spatial_uniformity_entropy,
+    from lunar_core.postprocessing.anms import SpatialUniformDistributor
+    distributor = SpatialUniformDistributor(grid_rows=8, grid_cols=8)
+    spatial_dist = distributor.compute_spatial_metrics(result.inliers, source.shape, use_source_coords=True)
+    spatial_dist.update({
+        "frame": "FULL_SOURCE_IMAGE",
         "raw_match_count": len(result.matches),
         "inlier_count": len(result.inliers),
         "inlier_ratio": float(result.metrics.inlier_ratio),
-    }
+        "spatial_uniformity_entropy": spatial_dist.get("spatial_entropy", result.metrics.spatial_uniformity_entropy),
+    })
     (output_path / "spatial_distribution.json").write_text(json.dumps(spatial_dist, indent=2), encoding="utf-8")
 
     # Generate visual artifacts
     _generate_residual_vector_plot(output_path / "residual_vectors.png", result.inliers, reg_transform)
-    _generate_visual_artifacts(output_path / "visual", source, reference, warped_original, result.matches, result.inliers, reg_transform)
+    _generate_visual_artifacts(output_path / "visual", source, reference, warped_original, result.matches, result.inliers, reg_transform, selected_matches=result.matches)
 
     return RealRegistrationResult(
         status="SUCCESS",
@@ -651,7 +683,7 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
         overlap_status=windows.overlap_status,
         scale_ratio=scale_ratio,
         illumination_metadata={"source": source_sun is not None, "reference": ref_sun is not None},
-        representation="phase_congruency",
+        representation=windows.spectral_representation,
         matcher=result.matcher_path,
         raw_match_count=len(result.matches),
         spatially_selected_match_count=len(result.matches),
@@ -660,7 +692,7 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
         transform_model="homography",
         transform_parameters=result.transform_matrix.tolist(),
         subpixel_count=sum(bool(match.subpixel_refined) for match in result.inliers),
-        coverage_fraction=result.metrics.spatial_uniformity_entropy,
+        coverage_fraction=spatial_dist["coverage_fraction"],
         residual_statistics={"reprojection_rmse_px": result.metrics.rmse_pixels},
         registered_output=str(registered_path),
         match_point_output=str(matches_path),

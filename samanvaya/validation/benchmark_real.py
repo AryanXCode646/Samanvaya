@@ -50,13 +50,32 @@ def _evaluate_checkpoints(checkpoint_path: Path, transform: Any, source_shape: t
     projected = homogeneous @ matrix.T
     projected = projected[:, :2] / projected[:, 2:3]
     errors = np.linalg.norm(projected - reference, axis=1)
+
+    integer_projected = np.round(projected)
+    int_errors = np.linalg.norm(integer_projected - reference, axis=1)
+
+    subpixel_rmse = float(np.sqrt(np.mean(errors ** 2)))
+    integer_rmse = float(np.sqrt(np.mean(int_errors ** 2)))
+    subpixel_median = float(np.median(errors))
+    integer_median = float(np.median(int_errors))
+    subpixel_p95 = float(np.percentile(errors, 95))
+    integer_p95 = float(np.percentile(int_errors, 95))
+    improvement = float(((integer_rmse - subpixel_rmse) / max(integer_rmse, 1e-6)) * 100.0) if integer_rmse > 0 else 0.0
+
     return {
         "status": "READY",
         "checkpoint_count": len(points),
         "valid_checkpoint_count": int(np.isfinite(errors).sum()),
-        "rmse_pixels": float(np.sqrt(np.mean(errors ** 2))),
-        "median_error_pixels": float(np.median(errors)),
-        "p95_error_pixels": float(np.percentile(errors, 95)),
+        "rmse_pixels": subpixel_rmse,
+        "subpixel_rmse_pixels": subpixel_rmse,
+        "integer_rmse_pixels": integer_rmse,
+        "median_error_pixels": subpixel_median,
+        "subpixel_median_pixels": subpixel_median,
+        "integer_median_pixels": integer_median,
+        "p95_error_pixels": subpixel_p95,
+        "subpixel_p95_pixels": subpixel_p95,
+        "integer_p95_pixels": integer_p95,
+        "improvement_percentage": improvement,
         "max_error_pixels": float(np.max(errors)),
         "mean_error_pixels": float(np.mean(errors)),
     }
@@ -146,6 +165,39 @@ def run_real_benchmark(manifest_path: str | Path, output_dir: str | Path) -> dic
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         writer.writerows({field: row.get(field) for field in fields} for row in rows)
+
+    # Export Phase 12 scale results table
+    scale_fields = ["pair", "scale_ratio", "matches", "inliers", "inlier_ratio", "held_out_rmse", "coverage", "status"]
+    with (output / "scale_results.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=scale_fields)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({
+                "pair": row.get("pair_id"),
+                "scale_ratio": row.get("scale_ratio"),
+                "matches": row.get("raw_match_count"),
+                "inliers": row.get("inlier_count"),
+                "inlier_ratio": row.get("inlier_ratio"),
+                "held_out_rmse": row.get("held_out_metrics", {}).get("rmse_pixels") if isinstance(row.get("held_out_metrics"), dict) else None,
+                "coverage": row.get("coverage_fraction"),
+                "status": row.get("status"),
+            })
+
+    # Export Phase 13 illumination results table
+    illum_fields = ["pair", "sun_difference", "phase_difference", "baseline_metrics", "Samanvaya_metrics"]
+    with (output / "illumination_results.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=illum_fields)
+        writer.writeheader()
+        for row in rows:
+            illum = row.get("illumination_metadata") or {}
+            writer.writerow({
+                "pair": row.get("pair_id"),
+                "sun_difference": illum.get("sun_azimuth_diff_deg"),
+                "phase_difference": illum.get("phase_angle_diff_deg"),
+                "baseline_metrics": json.dumps(row.get("baseline_comparison")),
+                "Samanvaya_metrics": json.dumps(row.get("residual_statistics")),
+            })
+
     summary_lines = ["# Real benchmark", "", f"Repository commit: `{git_commit_sha()}`", ""]
     for row in rows:
         summary_lines.append(f"- `{row.get('pair_id')}`: **{row.get('status')}** — {row.get('reason') or row.get('failure_reason') or row.get('validation_status')}")
