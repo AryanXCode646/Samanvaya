@@ -228,16 +228,16 @@ def test_pair_selector_uses_footprint_intersection_when_available(tmp_path: Path
 
     pair = propose_pair(source, target)
 
-    assert pair.status == "confirmed_overlap"
-    assert pair.overlap_status == "APPROXIMATE"
-    assert pair.geometry_method == "planar_bounding_box_approximation"
+    assert pair.status == "proximity_candidate"
+    assert pair.overlap_status == "OVERLAP_UNKNOWN"
+    assert pair.geometry_method == "spherical_area_plus_lat_lon_prefilter"
     assert pair.overlap_ratio == 0.25
     assert pair.intersection_area == 1.0
     assert pair.source_area == 4.0
     assert pair.target_area == 4.0
     assert pair.selection_method == "footprint_intersection"
     assert pair.pair_id == "source__target"
-    assert pair.reason.startswith("Footprint overlap")
+    assert pair.reason.startswith("Candidate overlap")
 
 
 def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
@@ -253,5 +253,5 @@ def test_pair_selector_rejects_disjoint_footprints(tmp_path: Path):
     pair = propose_pair(source, target)
 
     assert pair.status == "rejected"
-    assert pair.overlap_status == "APPROXIMATE"
+    assert pair.overlap_status == "NON_OVERLAPPING"
     assert pair.overlap_ratio == 0.0

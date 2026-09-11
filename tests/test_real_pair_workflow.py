@@ -10,6 +10,9 @@ from samanvaya.data_io.import_real_pair import import_real_pair
 from samanvaya.validation.import_control_points import import_control_points
 from samanvaya.validation.run_real_pair import run_real_pair, validate_real_pair
 from samanvaya.validation.evaluate_real_pair import evaluate_real_pair
+from samanvaya.validation.real_registration import register_products
+from samanvaya.validation.benchmark_real import run_real_benchmark
+from lunar_core.data_io.mission_catalog import inspect_product
 
 
 def _write_tif(path: Path, values: np.ndarray) -> None:
@@ -143,3 +146,36 @@ def test_independent_checkpoints_apply_executed_transform(tmp_path: Path):
     assert result["status"] == "READY"
     assert result["rmse_px"] == pytest.approx(0.0)
     assert result["evaluation_basis"] == "held_out_checkpoint_reprojection"
+
+
+def test_real_registration_api_writes_and_reopens_registered_raster(tmp_path: Path):
+    source_path = tmp_path / "CH2_OHRC_API.tif"
+    reference_path = tmp_path / "LRO_NAC_API.tif"
+    source = np.zeros((64, 64), dtype=np.float32)
+    source[16:48, 16:48] = 1.0
+    reference = np.zeros((64, 64), dtype=np.float32)
+    reference[18:50, 18:50] = 1.0
+    _write_tif(source_path, source)
+    _write_tif(reference_path, reference)
+
+    source_product = inspect_product(source_path, root_dir=tmp_path)
+    reference_product = inspect_product(reference_path, root_dir=tmp_path)
+    result = register_products(source_product, reference_product, tmp_path / "output")
+
+    assert result.status in {"SUCCESS", "NO_CORRESPONDENCE"}
+    if result.status == "SUCCESS":
+        with rasterio.open(result.registered_output) as dataset:
+            assert dataset.width == 64
+            assert dataset.height == 64
+        assert Path(result.match_point_output).exists()
+
+
+def test_real_benchmark_manifest_without_pairs_returns_data_required(tmp_path: Path):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"schema_version": "1.0", "pairs": []}), encoding="utf-8")
+
+    result = run_real_benchmark(manifest, tmp_path / "benchmark")
+
+    assert result["status"] == "DATA_REQUIRED"
+    assert (tmp_path / "benchmark" / "results.json").exists()
+    assert not (tmp_path / "benchmark" / "registered_source.tif").exists()

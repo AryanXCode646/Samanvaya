@@ -31,7 +31,7 @@ class ProductPair:
     pair_type: Optional[str] = None
     selection_method: str = "metadata"
     overlap_status: str = "UNKNOWN"
-    geometry_method: str = "planar_bounding_box_approximation"
+    geometry_method: str = "unknown"
 
     def __post_init__(self) -> None:
         if self.pair_id is None:
@@ -61,6 +61,8 @@ class ProductPair:
             "status": self.status,
             "overlap_status": self.overlap_status,
             "geometry_method": self.geometry_method,
+            "source_footprint_status": self.source_product.footprint_status if self.source_product else "UNAVAILABLE",
+            "target_footprint_status": self.target_product.footprint_status if self.target_product else "UNAVAILABLE",
             "reason": self.reason,
         }
 
@@ -166,20 +168,29 @@ def propose_pair(source: MissionProduct, target: MissionProduct, max_center_dist
         selection_method="footprint_intersection" if overlap_ratio is not None else "center_proximity_prefilter",
     )
     if overlap_ratio is not None:
+        approximate_geometry = source.footprint_status != "AUTHORITATIVE" or target.footprint_status != "AUTHORITATIVE"
         if overlap_ratio <= 0:
             return ProductPair(
                 **base,
                 status="rejected",
-                overlap_status="APPROXIMATE",
-                geometry_method="planar_bounding_box_approximation",
-                reason="Footprints do not intersect under the planar bounding-box approximation.",
+                overlap_status="NON_OVERLAPPING",
+                geometry_method="lat_lon_bounding_box_prefilter",
+                reason="Footprints do not intersect under the conservative geographic prefilter; authoritative overlap is unavailable.",
+            )
+        if approximate_geometry:
+            return ProductPair(
+                **base,
+                status="proximity_candidate",
+                overlap_status="OVERLAP_UNKNOWN",
+                geometry_method="spherical_area_plus_lat_lon_prefilter",
+                reason="Candidate overlap detected using approximate geographic footprints; authoritative lunar geometry is required before confirmation.",
             )
         return ProductPair(
             **base,
             status="confirmed_overlap",
-            overlap_status="APPROXIMATE",
-            geometry_method="planar_bounding_box_approximation",
-            reason=f"Footprint overlap is {overlap_ratio:.4f} of the smaller footprint under a planar bounding-box approximation.",
+            overlap_status="CONFIRMED_OVERLAP",
+            geometry_method="authoritative_product_geometry",
+            reason=f"Footprint overlap is {overlap_ratio:.4f} of the smaller authoritative footprint.",
         )
     if distance is None:
         return ProductPair(

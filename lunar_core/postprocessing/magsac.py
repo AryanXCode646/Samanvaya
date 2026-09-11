@@ -29,8 +29,12 @@ class RobustEstimator:
         if len(matches) < 4:
             return None, []
 
-        src_pts = np.array([m.ref_xy for m in matches], dtype=np.float32)
-        dst_pts = np.array([m.target_xy for m in matches], dtype=np.float32)
+        if any(m.source_frame != "FULL_SOURCE_IMAGE" or m.reference_frame != "FULL_REFERENCE_IMAGE" for m in matches):
+            raise ValueError("MIXED_COORDINATE_FRAMES")
+
+        # Authoritative convention: source FULL_IMAGE -> reference FULL_IMAGE.
+        src_pts = np.array([m.target_xy for m in matches], dtype=np.float32)
+        dst_pts = np.array([m.ref_xy for m in matches], dtype=np.float32)
 
         method = getattr(cv2, "USAC_MAGSAC", cv2.RANSAC)
 
@@ -59,14 +63,14 @@ class RobustEstimator:
 
         for idx in inlier_indices:
             m = matches[idx]
-            pt = np.array([m.ref_xy[0], m.ref_xy[1], 1.0], dtype=np.float64)
+            pt = np.array([m.target_xy[0], m.target_xy[1], 1.0], dtype=np.float64)
             proj = m_3x3 @ pt
             if abs(proj[2]) > 1e-7:
                 proj_xy = (proj[0] / proj[2], proj[1] / proj[2])
             else:
                 proj_xy = (proj[0], proj[1])
 
-            res = float(np.sqrt((proj_xy[0] - m.target_xy[0])**2 + (proj_xy[1] - m.target_xy[1])**2))
+            res = float(np.sqrt((proj_xy[0] - m.ref_xy[0])**2 + (proj_xy[1] - m.ref_xy[1])**2))
             inliers.append(
                 KeypointMatch(
                     ref_xy=m.ref_xy,
@@ -74,6 +78,8 @@ class RobustEstimator:
                     confidence=m.confidence,
                     subpixel_refined=m.subpixel_refined,
                     residual_error=res,
+                    source_frame=m.source_frame,
+                    reference_frame=m.reference_frame,
                 )
             )
 
@@ -87,11 +93,10 @@ class RobustEstimator:
         output_shape: Tuple[int, int],
     ) -> np.ndarray:
         h, w = output_shape
-        # Invert forward matrix: we warp target into reference coordinate frame
+        # Matrix convention is source/target -> reference. OpenCV performs inverse
+        # mapping internally when WARP_INVERSE_MAP is not supplied.
         if model == TransformationType.HOMOGRAPHY:
-            h_inv = np.linalg.inv(matrix)
-            return cv2.warpPerspective(image, h_inv, (w, h), flags=cv2.INTER_LINEAR)
+            return cv2.warpPerspective(image, matrix, (w, h), flags=cv2.INTER_LINEAR)
         else:
             m_3x3 = np.vstack([matrix, [0, 0, 1]]) if matrix.shape == (2, 3) else matrix
-            m_inv = np.linalg.inv(m_3x3)
-            return cv2.warpAffine(image, m_inv[:2, :], (w, h), flags=cv2.INTER_LINEAR)
+            return cv2.warpAffine(image, m_3x3[:2, :], (w, h), flags=cv2.INTER_LINEAR)

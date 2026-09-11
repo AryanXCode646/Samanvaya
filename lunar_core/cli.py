@@ -205,6 +205,80 @@ def cmd_catalog_show(args: argparse.Namespace) -> None:
         print(json.dumps(list(csv.DictReader(stream)), indent=2))
 
 
+def cmd_inspect_product(args: argparse.Namespace) -> None:
+    """Inspect one supplied product without loading its raster pixels."""
+    from lunar_core.data_io.mission_catalog import inspect_product
+
+    product = inspect_product(Path(args.product), root_dir=Path(args.root).resolve() if args.root else None)
+    print(json.dumps(product.to_dict(), indent=2, default=str))
+    if args.require_valid and str(product.status) != "validated":
+        raise SystemExit(2)
+
+
+def cmd_discover_pairs(args: argparse.Namespace) -> None:
+    from lunar_core.data_io.discovery import discover_benchmark_pairs
+
+    pairs = discover_benchmark_pairs(args.root, source_mission=args.source_mission)
+    print(json.dumps([pair.to_dict() for pair in pairs], indent=2, default=str))
+
+
+def cmd_inventory(args: argparse.Namespace) -> None:
+    from lunar_core.data_io.discovery import inventory_products
+
+    records = inventory_products(args.root)
+    output = Path(args.output).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "products": records}, indent=2, default=str), encoding="utf-8")
+    print(json.dumps(records, indent=2, default=str))
+
+
+def cmd_discover_real_pairs(args: argparse.Namespace) -> None:
+    from lunar_core.data_io.discovery import discover_benchmark_pairs
+
+    pairs = [pair.to_dict() for pair in discover_benchmark_pairs(args.root)]
+    output = Path(args.output).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "pairs": pairs}, indent=2, default=str), encoding="utf-8")
+    print(json.dumps(pairs, indent=2, default=str))
+
+
+def cmd_benchmark_real(args: argparse.Namespace) -> None:
+    from samanvaya.validation.benchmark_real import run_real_benchmark
+
+    result = run_real_benchmark(args.manifest, args.output)
+    print(json.dumps(result, indent=2, default=str))
+    if result.get("status") == "DATA_REQUIRED":
+        raise SystemExit(2)
+
+
+def cmd_verify_output(args: argparse.Namespace) -> None:
+    import rasterio
+
+    path = Path(args.output).expanduser().resolve()
+    if not path.is_file():
+        print(json.dumps({"status": "OUTPUT_VERIFICATION_FAILED", "reason": f"Missing output: {path}"}))
+        raise SystemExit(2)
+    try:
+        with rasterio.open(path) as dataset:
+            data = dataset.read(1, masked=True)
+            valid = int(data.count())
+            result = {
+                "status": "VERIFIED" if valid else "OUTPUT_VERIFICATION_FAILED",
+                "path": str(path),
+                "width": dataset.width,
+                "height": dataset.height,
+                "dtype": dataset.dtypes[0],
+                "crs": str(dataset.crs) if dataset.crs else None,
+                "nodata": dataset.nodata,
+                "valid_pixels": valid,
+            }
+    except (OSError, ValueError) as exc:
+        result = {"status": "OUTPUT_VERIFICATION_FAILED", "path": str(path), "reason": str(exc)}
+    print(json.dumps(result, indent=2))
+    if result["status"] != "VERIFIED":
+        raise SystemExit(2)
+
+
 def _read_manifest(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         raise FileNotFoundError(f"Catalog manifest does not exist: {path}")
@@ -363,6 +437,37 @@ def main() -> None:
     p_catalog_show = catalog_commands.add_parser("show", help="Display a CSV catalog manifest")
     p_catalog_show.add_argument("manifest", help="CSV manifest path")
     p_catalog_show.set_defaults(func=cmd_catalog_show)
+
+    # samanvaya inspect-product
+    p_inspect = subparsers.add_parser("inspect-product", help="Inspect one supplied mission product")
+    p_inspect.add_argument("product", help="Raster product path")
+    p_inspect.add_argument("--root", help="Allowed root directory for path safety")
+    p_inspect.add_argument("--require-valid", action="store_true", help="Exit 2 unless the product is validated")
+    p_inspect.set_defaults(func=cmd_inspect_product)
+
+    p_discover_pairs = subparsers.add_parser("discover-pairs", help="Discover conservative mission/reference candidates")
+    p_discover_pairs.add_argument("root", help="Directory containing supplied products")
+    p_discover_pairs.add_argument("--source-mission", help="Restrict source mission")
+    p_discover_pairs.set_defaults(func=cmd_discover_pairs)
+
+    p_inventory = subparsers.add_parser("inventory", help="Inventory supplied mission/reference products")
+    p_inventory.add_argument("--root", required=True)
+    p_inventory.add_argument("--output", required=True)
+    p_inventory.set_defaults(func=cmd_inventory)
+
+    p_discover_real_pairs = subparsers.add_parser("discover-real-pairs", help="Discover real-data candidate pairs")
+    p_discover_real_pairs.add_argument("--root", required=True)
+    p_discover_real_pairs.add_argument("--output", required=True)
+    p_discover_real_pairs.set_defaults(func=cmd_discover_real_pairs)
+
+    p_benchmark_real = subparsers.add_parser("benchmark-real", help="Execute a supplied real-data benchmark manifest")
+    p_benchmark_real.add_argument("--manifest", required=True)
+    p_benchmark_real.add_argument("--output", required=True)
+    p_benchmark_real.set_defaults(func=cmd_benchmark_real)
+
+    p_verify_output = subparsers.add_parser("verify-output", help="Reopen and verify a registered raster")
+    p_verify_output.add_argument("output")
+    p_verify_output.set_defaults(func=cmd_verify_output)
 
     # samanvaya pair discover
     p_pair = subparsers.add_parser("pair", help="Discover metadata-supported product pairs")

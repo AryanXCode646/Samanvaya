@@ -10,6 +10,7 @@ import numpy as np
 from lunar_core.pipeline import LunarCorePipeline
 from lunar_core.models import SunAngles, TransformationType
 from samanvaya.data_io.import_real_pair import DEFAULT_ARTIFACT_ROOT, DEFAULT_MANIFEST_PATH
+from samanvaya.provenance import config_hash, git_commit_sha
 
 
 def _make_mock_source_reference(source: np.ndarray, reference: np.ndarray):
@@ -95,6 +96,14 @@ def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_
         "absolute_accuracy": "PENDING_INDEPENDENT_CHECKPOINTS",
         "source_product_id": source_meta.get("product_id"),
         "reference_product_id": ref_meta.get("product_id"),
+        "repository_commit": git_commit_sha(),
+        "config_hash": config_hash({
+            "transformation": "homography",
+            "subpixel_refinement": True,
+            "source_gsd": source_meta.get("gsd_m"),
+            "reference_gsd": ref_meta.get("gsd_m"),
+        }),
+        "validation_scope": "REAL_REGISTRATION_PENDING_INDEPENDENT_VALIDATION",
     }
     (artifact_dir / "metrics.json").write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
     (artifact_dir / "metadata.json").write_text(json.dumps({"pair_id": pair_id, "source": source_meta, "reference": ref_meta}, indent=2), encoding="utf-8")
@@ -146,55 +155,19 @@ def validate_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANI
         }
         return status
 
-    try:
-        control_payload = json.loads(control_points_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Control-point file is not valid JSON: {control_points_path}") from exc
+    from samanvaya.validation.evaluate_real_pair import evaluate_real_pair
 
-    points = control_payload.get("points", [])
-    if not isinstance(points, list) or len(points) < 4:
-        return {
-            "pair_id": pair_id,
-            "status": "FAIL",
-            "ground_truth_status": "GROUND_TRUTH_AVAILABLE_BUT_INSUFFICIENT",
-            "reason": "Independent ground truth is present but fewer than four valid control points were supplied.",
-            "metrics": {"rmse_px": None, "p95_px": None, "inlier_count": 0},
-            "artifact_dir": pair.get("artifacts_dir"),
-        }
-
-    source_points = np.asarray([[float(p["source_x"]), float(p["source_y"])] for p in points], dtype=np.float64)
-    reference_points = np.asarray([[float(p["reference_x"]), float(p["reference_y"])] for p in points], dtype=np.float64)
-    if source_points.shape != reference_points.shape or source_points.shape[1] != 2:
-        return {
-            "pair_id": pair_id,
-            "status": "FAIL",
-            "ground_truth_status": "GROUND_TRUTH_AVAILABLE_BUT_INVALID",
-            "reason": "Annotated control points are malformed or mismatched between source and reference.",
-            "metrics": {"rmse_px": None, "p95_px": None, "inlier_count": 0},
-            "artifact_dir": pair.get("artifacts_dir"),
-        }
-
-    residuals = np.linalg.norm(source_points - reference_points, axis=1)
-    rmse = float(np.sqrt(np.mean(residuals ** 2)))
-    p95 = float(np.percentile(residuals, 95))
-    status_value = "PASS" if rmse < 0.40 and len(points) >= 4 else "FAIL"
-    if status_value == "PASS":
-        evidence = "Independent ground-truth control points available and RMSE is within the 0.40 px mandate."
-    else:
-        evidence = "Independent ground-truth control points are available, but the measured residuals do not meet the 0.40 px mandate."
-
-    return {
-        "pair_id": pair_id,
-        "status": status_value,
-        "ground_truth_status": "INDEPENDENT_GROUND_TRUTH_AVAILABLE",
-        "reason": evidence,
-        "metrics": {
-            "rmse_px": rmse,
-            "p95_px": p95,
-            "point_count": len(points),
-        },
-        "artifact_dir": pair.get("artifacts_dir"),
-    }
+    evaluated = evaluate_real_pair(pair_id, manifest_path=manifest_file)
+    evaluated["artifact_dir"] = pair.get("artifacts_dir")
+    if evaluated.get("status") == "READY":
+        rmse = evaluated.get("rmse_px")
+        evaluated["status"] = "PASS" if rmse is not None and rmse < 0.40 else "FAIL"
+        evaluated["reason"] = (
+            "Independent held-out checkpoints were evaluated against the executed transform."
+            if evaluated["status"] == "PASS"
+            else "Independent held-out checkpoints were evaluated, but residuals exceed the 0.40 px mandate."
+        )
+    return evaluated
 
 
 def _main() -> None:
