@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from lunar_core.preprocessing.spectral import HyperspectralBandSelector
+from lunar_core.preprocessing.spectral import SpectralCube
 from lunar_core.alignment.scale_space import (
     HierarchicalMultiModalBridge,
     HierarchicalAlignmentResult,
@@ -56,6 +57,27 @@ def create_synthetic_iirs_cube(
 
 class TestHyperspectralBandSelector:
     """Tests for continuum window isolation and PCA dimensionality reduction."""
+
+    def test_spectral_cube_representation_records_wavelength_provenance(self):
+        cube = SpectralCube(
+            np.ones((4, 8, 8), dtype=np.float32),
+            wavelengths=np.array([1.0, 1.1, 1.2, 1.3], dtype=np.float32),
+            wavelength_units="um",
+            wavelength_source="pds4_label",
+            axis_order="bands,line,sample",
+            metadata_provenance="fixture.xml",
+        )
+        provenance = cube.representation_provenance("pca", components=1)
+        assert provenance["wavelength_source"] == "pds4_label"
+        assert provenance["wavelength_range"][0] == pytest.approx(1.0)
+        assert provenance["wavelength_range"][1] == pytest.approx(1.3)
+        assert provenance["axis_order"] == "bands,line,sample"
+
+    def test_spectral_cube_without_wavelength_metadata_is_explicit(self):
+        cube = SpectralCube(np.ones((4, 8, 8), dtype=np.float32))
+        provenance = cube.representation_provenance("band_mean")
+        assert provenance["wavelength_source"] == "WAVELENGTH_METADATA_UNAVAILABLE"
+        assert provenance["wavelength_range"] is None
 
     def test_default_initialization(self):
         selector = HyperspectralBandSelector()

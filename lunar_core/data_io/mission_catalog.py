@@ -7,6 +7,7 @@ import csv
 import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
+from datetime import datetime, timezone
 
 from lunar_core.data_io.mission_product import IdentificationMethod, MissionProduct, ProductStatus
 from lunar_core.data_io.product_identity import (
@@ -139,6 +140,10 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
         identification_method=IdentificationMethod.UNKNOWN.value,
         label_association_method=resolution.method.value if resolution.method else None,
         status=ProductStatus.DISCOVERED,
+        archive="local authorized data",
+        access_mode="LOCAL",
+        ingestion_status="local_file_discovered",
+        metadata_timestamp=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     )
     detached = image_path.suffix.lower() in {".img", ".qub"}
     if label_path is None and detached:

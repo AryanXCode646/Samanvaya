@@ -71,6 +71,12 @@ class MissionProduct:
     label_association_method: Optional[str] = None
     geometry_method: Optional[str] = None
     overlap_status: Optional[str] = None
+    archive: Optional[str] = None
+    source_url: Optional[str] = None
+    access_mode: Optional[str] = None
+    metadata_timestamp: Optional[str] = None
+    sha256: Optional[str] = None
+    ingestion_status: Optional[str] = None
     status: ProductStatus | str = ProductStatus.DISCOVERED
     validation_status: Optional[str] = None
     validation_message: Optional[str] = None

@@ -47,12 +47,20 @@ def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_
     source_path = Path(source_meta["image_path"]).expanduser().resolve()
     ref_path = Path(ref_meta["image_path"]).expanduser().resolve()
 
-    source_data = np.random.default_rng(0).normal(0.5, 0.05, size=(128, 128)).astype(np.float32)
-    ref_data = np.random.default_rng(1).normal(0.5, 0.05, size=(128, 128)).astype(np.float32)
-    if source_path.exists():
-        source_data = _read_image_array(source_path)
-    if ref_path.exists():
-        ref_data = _read_image_array(ref_path)
+    missing = [str(path) for path in (source_path, ref_path) if not path.is_file()]
+    if missing:
+        return {
+            "pair_id": pair_id,
+            "status": "BLOCKED_BY_MISSING_DATA",
+            "ground_truth_status": "NOT_RUN",
+            "reason": "Registration was not executed because the manifest references missing raster products.",
+            "missing_products": missing,
+            "artifact_dir": str(Path(artifact_root).expanduser().resolve() / pair_id),
+            "metrics": {"rmse_px": None, "p95_px": None, "inlier_count": None},
+        }
+
+    source_data = _read_image_array(source_path)
+    ref_data = _read_image_array(ref_path)
 
     pipeline = LunarCorePipeline(transformation_type=TransformationType.HOMOGRAPHY)
     result = pipeline.register(
@@ -66,18 +74,12 @@ def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_
 
     artifact_dir = Path(artifact_root).expanduser().resolve() / pair_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    for filename in [
-        "source.png",
-        "reference.png",
-        "matches.png",
-        "inliers.png",
-        "overlay.png",
-        "residuals.png",
-        "metrics.json",
-        "metadata.json",
-        "run.log",
-    ]:
-        (artifact_dir / filename).touch(exist_ok=True)
+    import cv2
+
+    cv2.imwrite(str(artifact_dir / "source.png"), np.clip(source_data, 0, 255).astype(np.uint8))
+    cv2.imwrite(str(artifact_dir / "reference.png"), np.clip(ref_data, 0, 255).astype(np.uint8))
+    if result.warped_target is not None:
+        cv2.imwrite(str(artifact_dir / "registered_source.png"), np.clip(result.warped_target, 0, 255).astype(np.uint8))
 
     metrics_payload = {
         "pair_id": pair_id,
@@ -90,13 +92,17 @@ def run_real_pair(pair_id: str, *, manifest_path: str | Path = DEFAULT_MANIFEST_
         "ground_truth_status": "PENDING_INDEPENDENT_GROUND_TRUTH",
         "rmse_px": None,
         "p95_px": None,
-        "absolute_accuracy": "PENDING",
+        "absolute_accuracy": "PENDING_INDEPENDENT_CHECKPOINTS",
         "source_product_id": source_meta.get("product_id"),
         "reference_product_id": ref_meta.get("product_id"),
     }
     (artifact_dir / "metrics.json").write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
     (artifact_dir / "metadata.json").write_text(json.dumps({"pair_id": pair_id, "source": source_meta, "reference": ref_meta}, indent=2), encoding="utf-8")
-    (artifact_dir / "run.log").write_text(f"Executed real pair registration for {pair_id}\n", encoding="utf-8")
+    (artifact_dir / "run.log").write_text(
+        f"Executed registration on supplied raster products for {pair_id}.\n"
+        "Ground-truth accuracy was not inferred from fitting-point reprojection.\n",
+        encoding="utf-8",
+    )
 
     output = {
         "pair_id": pair_id,

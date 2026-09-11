@@ -23,6 +23,10 @@ __all__ = [
     "scan",
     "load_dataset_manifest",
     "summarize_dataset_status",
+    "MissionArchiveStatus",
+    "check_archive",
+    "latest_product",
+    "scan_local_chandrayaan2",
 ]
 
 
@@ -82,4 +86,19 @@ def __getattr__(name: str) -> Any:
         if name == "ProductPair":
             return ProductPair
         return propose_pair
+    if name in {"MissionArchiveStatus", "check_archive", "latest_product", "scan_local_chandrayaan2"}:
+        from lunar_core.data_io.archive_status import (
+            MissionArchiveStatus,
+            check_archive,
+            latest_product,
+            scan_local_chandrayaan2,
+        )
+
+        mapping = {
+            "MissionArchiveStatus": MissionArchiveStatus,
+            "check_archive": check_archive,
+            "latest_product": latest_product,
+            "scan_local_chandrayaan2": scan_local_chandrayaan2,
+        }
+        return mapping[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

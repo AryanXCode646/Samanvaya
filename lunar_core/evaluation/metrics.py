@@ -51,6 +51,11 @@ class RegistrationEvaluationReport:
     ground_truth_available: bool = False
     metric_basis: str = "reprojection_consensus"
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    occupied_grid_ratio: Optional[float] = None
+    spatial_coverage_ratio: Optional[float] = None
+    edge_coverage_ratio: Optional[float] = None
+    mean_nearest_neighbor_pixels: Optional[float] = None
+    spatial_quality_status: str = "NOT_COMPUTED"
 
     @property
     def inlier_ratio(self) -> float:
@@ -123,6 +128,12 @@ class RegistrationEvaluationReport:
                 "isro_mandate_threshold_px": 0.40,
                 "processing_time_ms": round(self.processing_time_ms, 2),
                 "image_shape_hw": list(self.image_shape),
+                "outlier_count": max(0, self.total_matches - self.inlier_count),
+                "occupied_grid_ratio": self.occupied_grid_ratio,
+                "spatial_coverage_ratio": self.spatial_coverage_ratio,
+                "edge_coverage_ratio": self.edge_coverage_ratio,
+                "mean_nearest_neighbor_pixels": self.mean_nearest_neighbor_pixels,
+                "spatial_quality_status": self.spatial_quality_status,
             },
             "homography_matrix": self.homography_matrix,
             "tie_points_count": len(self.tie_points),
@@ -400,6 +411,60 @@ class EvaluationEngine:
         max_h = np.log2(grid_bins * grid_bins)
         return float(np.clip(shannon / max_h, 0.0, 1.0))
 
+    @staticmethod
+    def compute_spatial_quality(
+        keypoints: np.ndarray,
+        image_shape: Tuple[int, int],
+        grid_bins: int = 8,
+    ) -> Dict[str, Any]:
+        """Compute coverage diagnostics without turning them into a pass/fail claim."""
+        points = np.asarray(keypoints, dtype=np.float64)
+        if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] != 2:
+            return {
+                "occupied_grid_ratio": 0.0,
+                "spatial_coverage_ratio": 0.0,
+                "edge_coverage_ratio": 0.0,
+                "mean_nearest_neighbor_pixels": None,
+                "spatial_quality_status": "INSUFFICIENT_COVERAGE",
+            }
+        height, width = image_shape[:2]
+        x_bins = np.clip((points[:, 0] / max(width, 1) * grid_bins).astype(int), 0, grid_bins - 1)
+        y_bins = np.clip((points[:, 1] / max(height, 1) * grid_bins).astype(int), 0, grid_bins - 1)
+        occupied = np.unique(y_bins * grid_bins + x_bins)
+        occupied_ratio = float(len(occupied) / (grid_bins * grid_bins))
+        x_span = float(np.ptp(points[:, 0]) / max(width, 1))
+        y_span = float(np.ptp(points[:, 1]) / max(height, 1))
+        coverage_ratio = float(np.clip(x_span * y_span, 0.0, 1.0))
+        edge_margin_x = max(width * 0.1, 1.0)
+        edge_margin_y = max(height * 0.1, 1.0)
+        edge_hits = (
+            (points[:, 0] <= edge_margin_x)
+            | (points[:, 0] >= width - edge_margin_x)
+            | (points[:, 1] <= edge_margin_y)
+            | (points[:, 1] >= height - edge_margin_y)
+        )
+        edge_coverage = float(np.mean(edge_hits))
+        if len(points) > 1:
+            deltas = points[:, None, :] - points[None, :, :]
+            distances = np.sqrt(np.sum(deltas * deltas, axis=2))
+            distances[distances == 0] = np.inf
+            mean_nn = float(np.mean(np.min(distances, axis=1)))
+        else:
+            mean_nn = None
+        if occupied_ratio >= 0.5 and coverage_ratio >= 0.5:
+            quality = "GOOD_DISTRIBUTION"
+        elif occupied_ratio >= 0.2 and coverage_ratio >= 0.2:
+            quality = "PARTIAL_COVERAGE"
+        else:
+            quality = "CLUSTERED_MATCHES"
+        return {
+            "occupied_grid_ratio": occupied_ratio,
+            "spatial_coverage_ratio": coverage_ratio,
+            "edge_coverage_ratio": edge_coverage,
+            "mean_nearest_neighbor_pixels": mean_nn,
+            "spatial_quality_status": quality,
+        }
+
     @classmethod
     def evaluate(
         cls,
@@ -473,6 +538,7 @@ class EvaluationEngine:
                 mean_res, median_res, max_res, std_res, ce90 = 999.0, 999.0, 999.0, 0.0, 999.0
 
             entropy = cls.compute_spatial_entropy(ref_pts, image_shape, grid_bins=8)
+            spatial_quality = cls.compute_spatial_quality(ref_pts, image_shape, grid_bins=8)
 
             # Package individual tie points
             tie_points: List[Dict[str, Any]] = []
@@ -512,6 +578,7 @@ class EvaluationEngine:
             )
             tie_points = []
             h_list = None
+            spatial_quality = cls.compute_spatial_quality(np.empty((0, 2)), image_shape, grid_bins=8)
 
             if ground_truth_available and ground_truth_control_points is not None:
                 gt_ref, gt_src = ground_truth_control_points
@@ -543,6 +610,7 @@ class EvaluationEngine:
             image_shape=image_shape,
             ground_truth_available=ground_truth_available,
             metric_basis="ground_truth_control_points" if ground_truth_available else "reprojection_consensus",
+            **spatial_quality,
         )
 
 

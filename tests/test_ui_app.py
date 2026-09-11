@@ -8,7 +8,18 @@ import numpy as np
 import pytest
 
 from lunar_core.models import KeypointMatch
-from lunar_core.ui.app import render_tie_point_correspondences
+from lunar_core.ui.app import data_type_label_for_key, preview_for_display, render_tie_point_correspondences
+
+
+def test_preview_preserves_aspect_ratio_and_downsamples():
+    image = np.zeros((200, 400), dtype=np.float32)
+    preview = preview_for_display(image, max_side=100)
+    assert preview.shape == (50, 100)
+
+
+def test_data_type_labels_are_explicit():
+    assert data_type_label_for_key("custom_upload") == "REAL MISSION DATA"
+    assert data_type_label_for_key("scenario_a") == "DEMO / SYNTHETIC"
 
 
 def test_render_tie_point_correspondences():
