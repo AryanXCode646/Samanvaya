@@ -226,9 +226,10 @@ def cmd_inventory(args: argparse.Namespace) -> None:
     from lunar_core.data_io.discovery import inventory_products
 
     records = inventory_products(args.root)
-    output = Path(args.output).expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "products": records}, indent=2, default=str), encoding="utf-8")
+    if getattr(args, "output", None):
+        output = Path(args.output).expanduser().resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "products": records}, indent=2, default=str), encoding="utf-8")
     print(json.dumps(records, indent=2, default=str))
 
 
@@ -236,9 +237,10 @@ def cmd_discover_real_pairs(args: argparse.Namespace) -> None:
     from lunar_core.data_io.discovery import discover_benchmark_pairs
 
     pairs = [pair.to_dict() for pair in discover_benchmark_pairs(args.root)]
-    output = Path(args.output).expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "pairs": pairs}, indent=2, default=str), encoding="utf-8")
+    if getattr(args, "output", None):
+        output = Path(args.output).expanduser().resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps({"root": str(Path(args.root).resolve()), "pairs": pairs}, indent=2, default=str), encoding="utf-8")
     print(json.dumps(pairs, indent=2, default=str))
 
 
@@ -452,12 +454,12 @@ def main() -> None:
 
     p_inventory = subparsers.add_parser("inventory", help="Inventory supplied mission/reference products")
     p_inventory.add_argument("--root", required=True)
-    p_inventory.add_argument("--output", required=True)
+    p_inventory.add_argument("--output", default=None, help="Optional output JSON path")
     p_inventory.set_defaults(func=cmd_inventory)
 
     p_discover_real_pairs = subparsers.add_parser("discover-real-pairs", help="Discover real-data candidate pairs")
     p_discover_real_pairs.add_argument("--root", required=True)
-    p_discover_real_pairs.add_argument("--output", required=True)
+    p_discover_real_pairs.add_argument("--output", default=None, help="Optional output JSON path")
     p_discover_real_pairs.set_defaults(func=cmd_discover_real_pairs)
 
     p_benchmark_real = subparsers.add_parser("benchmark-real", help="Execute a supplied real-data benchmark manifest")

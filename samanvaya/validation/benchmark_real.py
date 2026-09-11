@@ -135,7 +135,11 @@ def run_real_benchmark(manifest_path: str | Path, output_dir: str | Path) -> dic
             (output / f"{pair_id}.failure.json").write_text(json.dumps(row, indent=2), encoding="utf-8")
         rows.append(row)
 
-    results = {"status": "COMPLETE", "repository_commit": git_commit_sha(), "results": rows}
+    all_data_required = bool(rows) and all(row.get("status") == "DATA_REQUIRED" for row in rows)
+    status = "DATA_REQUIRED" if all_data_required else "COMPLETE"
+    results = {"status": status, "repository_commit": git_commit_sha(), "results": rows}
+    if all_data_required:
+        results["reason"] = "Required mission source/reference rasters are missing."
     (output / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     fields = ["pair_id", "status", "validation_status", "source_id", "reference_id", "raw_match_count", "inlier_count", "inlier_ratio", "coverage_fraction", "failure_reason", "reason"]
     with (output / "results.csv").open("w", newline="", encoding="utf-8") as stream:

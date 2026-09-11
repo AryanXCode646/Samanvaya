@@ -63,8 +63,42 @@ class RealRegistrationResult:
     source_mission: Optional[str] = None
     reference_mission: Optional[str] = None
 
+    @property
+    def source_product_id(self) -> str:
+        return self.source_id
+
+    @property
+    def reference_product_id(self) -> str:
+        return self.reference_id
+
+    @property
+    def selected_match_count(self) -> Optional[int]:
+        return self.spatially_selected_match_count
+
+    @property
+    def transform(self) -> Optional[list[list[float]]]:
+        return self.transform_parameters
+
+    @property
+    def subpixel_statistics(self) -> dict[str, Any]:
+        return {
+            "subpixel_count": self.subpixel_count,
+            "residual_statistics": self.residual_statistics,
+        }
+
+    @property
+    def match_output(self) -> Optional[str]:
+        return self.match_point_output
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["source_product_id"] = self.source_product_id
+        d["reference_product_id"] = self.reference_product_id
+        d["selected_match_count"] = self.selected_match_count
+        d["transform"] = self.transform
+        d["subpixel_statistics"] = self.subpixel_statistics
+        d["match_output"] = self.match_output
+        return d
 
 
 def _sha256(path: Path) -> str:
@@ -194,6 +228,73 @@ def _generate_residual_vector_plot(path: Path, inliers: list[Any], transform_obj
     plt.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
+
+
+def _generate_visual_artifacts(
+    visual_dir: Path,
+    source: np.ndarray,
+    reference: np.ndarray,
+    warped: np.ndarray,
+    matches: list[Any],
+    inliers: list[Any],
+    reg_transform: RegistrationTransform,
+) -> None:
+    visual_dir.mkdir(parents=True, exist_ok=True)
+
+    def _normalize_u8(img: np.ndarray) -> np.ndarray:
+        fin = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        mn, mx = float(np.min(fin)), float(np.max(fin))
+        if mx - mn < 1e-6:
+            return np.zeros(fin.shape, dtype=np.uint8)
+        return np.clip((fin - mn) / (mx - mn) * 255.0, 0, 255).astype(np.uint8)
+
+    src_u8 = _normalize_u8(source)
+    ref_u8 = _normalize_u8(reference)
+    warp_u8 = _normalize_u8(warped)
+
+    # 1. source.png & reference.png
+    cv2.imwrite(str(visual_dir / "source.png"), src_u8)
+    cv2.imwrite(str(visual_dir / "reference.png"), ref_u8)
+
+    # 2. raw_matches.png & verified_matches.png
+    def _draw_matches(pts_src: list[Any], pts_ref: list[Any], out_path: Path) -> None:
+        h1, w1 = src_u8.shape[:2]
+        h2, w2 = ref_u8.shape[:2]
+        canvas = np.zeros((max(h1, h2), w1 + w2, 3), dtype=np.uint8)
+        canvas[:h1, :w1] = cv2.cvtColor(src_u8, cv2.COLOR_GRAY2BGR)
+        canvas[:h2, w1:w1 + w2] = cv2.cvtColor(ref_u8, cv2.COLOR_GRAY2BGR)
+        for ps, pr in zip(pts_src[:500], pts_ref[:500]):
+            pt1 = (int(round(float(ps[0]))), int(round(float(ps[1]))))
+            pt2 = (int(round(float(pr[0]))) + w1, int(round(float(pr[1]))))
+            cv2.line(canvas, pt1, pt2, (0, 255, 0), 1, cv2.LINE_AA)
+            cv2.circle(canvas, pt1, 2, (0, 0, 255), -1)
+            cv2.circle(canvas, pt2, 2, (255, 0, 0), -1)
+        cv2.imwrite(str(out_path), canvas)
+
+    if matches:
+        _draw_matches([m.target_xy for m in matches], [m.ref_xy for m in matches], visual_dir / "raw_matches.png")
+    if inliers:
+        _draw_matches([m.target_xy for m in inliers], [m.ref_xy for m in inliers], visual_dir / "verified_matches.png")
+
+    # 3. uniform_matches.png
+    fig, ax = plt.subplots(figsize=(6, 6))
+    if inliers:
+        ref_x = [float(m.ref_xy[0]) for m in inliers]
+        ref_y = [float(m.ref_xy[1]) for m in inliers]
+        ax.scatter(ref_x, ref_y, c="blue", s=15, alpha=0.7)
+    ax.set_xlim(0, max(1, reference.shape[1]))
+    ax.set_ylim(max(1, reference.shape[0]), 0)
+    ax.set_title("Inlier Spatial Distribution (Reference Frame)")
+    plt.tight_layout()
+    fig.savefig(visual_dir / "uniform_matches.png", dpi=100)
+    plt.close(fig)
+
+    # 4. registered_overlay.png
+    blend = cv2.addWeighted(ref_u8, 0.5, warp_u8, 0.5, 0)
+    cv2.imwrite(str(visual_dir / "registered_overlay.png"), blend)
+
+    # 5. residual_vectors.png
+    _generate_residual_vector_plot(visual_dir / "residual_vectors.png", inliers, reg_transform)
 
 
 def register_products(source_product: Any, reference_product: Any, output_dir: str | Path, *, config: Optional[dict[str, Any]] = None) -> RealRegistrationResult:
@@ -497,8 +598,49 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
     }
     (output_path / "geometry.json").write_text(json.dumps(geometry_report, indent=2), encoding="utf-8")
 
-    # Generate residual vectors visual artifact
+    # Write complete real output package
+    src_meta = source_product.to_dict() if hasattr(source_product, "to_dict") else dict(source_product)
+    ref_meta = reference_product.to_dict() if hasattr(reference_product, "to_dict") else dict(reference_product)
+    (output_path / "source_metadata.json").write_text(json.dumps(src_meta, indent=2, default=str), encoding="utf-8")
+    (output_path / "reference_metadata.json").write_text(json.dumps(ref_meta, indent=2, default=str), encoding="utf-8")
+
+    overlap_info = {
+        "overlap_status": windows.overlap_status,
+        "geometry_method": windows.geometry_method,
+        "scale_ratio": scale_ratio,
+        "source_window": {"col_off": windows.source_window.col_off, "row_off": windows.source_window.row_off, "width": windows.source_window.width, "height": windows.source_window.height},
+        "reference_window": {"col_off": windows.reference_window.col_off, "row_off": windows.reference_window.row_off, "width": windows.reference_window.width, "height": windows.reference_window.height},
+    }
+    (output_path / "overlap.json").write_text(json.dumps(overlap_info, indent=2), encoding="utf-8")
+
+    prov_record = {**provenance, "pair_id": output_path.name, "runtime_ms": (time.perf_counter() - started) * 1000.0}
+    (output_path / "provenance.json").write_text(json.dumps(prov_record, indent=2, default=str), encoding="utf-8")
+
+    coord_audit = {
+        "source_frame": "FULL_SOURCE_IMAGE",
+        "reference_frame": "FULL_REFERENCE_IMAGE",
+        "transform_direction": "SOURCE_TO_REFERENCE",
+        "convention": "T(source FULL_IMAGE) = reference FULL_IMAGE",
+        "source_offset": [windows.source_window.col_off, windows.source_window.row_off],
+        "reference_offset": [windows.reference_window.col_off, windows.reference_window.row_off],
+        "source_gsd_m": source_gsd,
+        "reference_gsd_m": reference_gsd,
+        "scale_ratio": scale_ratio,
+    }
+    (output_path / "coordinate_audit.json").write_text(json.dumps(coord_audit, indent=2), encoding="utf-8")
+
+    spatial_dist = {
+        "spatial_uniformity_entropy": result.metrics.spatial_uniformity_entropy,
+        "coverage_fraction": result.metrics.spatial_uniformity_entropy,
+        "raw_match_count": len(result.matches),
+        "inlier_count": len(result.inliers),
+        "inlier_ratio": float(result.metrics.inlier_ratio),
+    }
+    (output_path / "spatial_distribution.json").write_text(json.dumps(spatial_dist, indent=2), encoding="utf-8")
+
+    # Generate visual artifacts
     _generate_residual_vector_plot(output_path / "residual_vectors.png", result.inliers, reg_transform)
+    _generate_visual_artifacts(output_path / "visual", source, reference, warped_original, result.matches, result.inliers, reg_transform)
 
     return RealRegistrationResult(
         status="SUCCESS",
@@ -523,7 +665,17 @@ def register_products(source_product: Any, reference_product: Any, output_dir: s
         registered_output=str(registered_path),
         match_point_output=str(matches_path),
         validation_status="REAL_REGISTRATION_PENDING_INDEPENDENT_VALIDATION",
-        provenance={**provenance, "runtime_ms": (time.perf_counter() - started) * 1000.0},
+        provenance=prov_record,
         source_mission=source_product.mission,
         reference_mission=reference_product.mission,
     )
+
+
+def register_pair(
+    source_product: Any,
+    reference_product: Any,
+    config: Optional[dict[str, Any]] = None,
+    output_dir: str | Path = "output/real",
+) -> RealRegistrationResult:
+    """Authoritative API entrypoint to register two validated MissionProduct objects."""
+    return register_products(source_product, reference_product, output_dir=output_dir, config=config)
