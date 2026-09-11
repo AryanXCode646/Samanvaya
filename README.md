@@ -246,8 +246,17 @@ A proximity-only match is not treated as an overlap-confirmed pair. When no vali
 
 Before an offline judging session, run `make prefetch-weights` once while internet access is available. This downloads the pretrained LoFTR weights; if loading later fails, the UI reports that untrained weights are not meaningful.
 
-### Running the Services
+### Running the Services & CLI
 ```bash
+# Discover & rank candidate pairs across mission archives
+python -m samanvaya discover-pairs --root data/ --json
+
+# Register products with optional independent checkpoint validation
+python -m samanvaya register source.tif reference.tif --checkpoints checkpoints.csv
+
+# Run 7-stage scientific ablation benchmark
+python -m samanvaya benchmark --ablation
+
 # Launch interactive Streamlit workbench
 ./start.sh
 # or: make run

@@ -129,6 +129,44 @@ def validate_real_pair_cli(pair_id: str, root: str | Path, *, json_output: bool 
     return result
 
 
+def discover_pairs_cli(
+    root: str = "data",
+    out: str | None = None,
+    min_overlap: float = 0.05,
+    json_output: bool = False,
+) -> dict[str, Any]:
+    from samanvaya.data_io.pair_discovery import PairDiscoveryEngine
+
+    engine = PairDiscoveryEngine(min_overlap_ratio=min_overlap)
+    manifest = engine.discover_and_rank_pairs(root)
+    if out:
+        manifest.export_json(out)
+    d = manifest.to_dict()
+    if json_output:
+        print(json.dumps(d, indent=2, default=str))
+    else:
+        print("REAL-DATA CANDIDATE PAIR DISCOVERY & RANKING")
+        print("-------------------------------------------")
+        print(f"Root Directory: {manifest.root_directory}")
+        print(f"Products Scanned: {manifest.products_scanned}")
+        print(f"Combinations Evaluated: {manifest.candidate_combinations_evaluated}")
+        print(f"Valid Candidates: {manifest.valid_candidate_count}")
+        print(f"Confirmed Overlap: {manifest.verified_overlap_count}")
+        print("")
+        if not manifest.ranked_pairs:
+            print("No candidate pairs discovered.")
+        else:
+            for p in manifest.ranked_pairs[:10]:
+                flag = "VALID" if p.is_valid_candidate else "REJECTED"
+                ov_str = f"{p.overlap_ratio:.1%}" if p.overlap_ratio is not None else "0.0%"
+                gsd_str = f"{p.gsd_ratio:.1f}x" if p.gsd_ratio is not None else "N/A"
+                print(f"[{flag}] {p.pair_id}")
+                print(f"  Score: {p.candidate_score:.4f} | Overlap: {p.overlap_status} ({ov_str}) | GSD Ratio: {gsd_str}")
+                if p.rejection_reason:
+                    print(f"  Reason: {p.rejection_reason}")
+    return d
+
+
 def register_cli(
     source_path: str,
     reference_path: str,
@@ -136,6 +174,7 @@ def register_cli(
     strategy: str = "auto",
     transform: str = "homography",
     subpixel: bool = True,
+    checkpoints_path: str | None = None,
     json_output: bool = False,
 ) -> dict[str, Any]:
     from samanvaya.validation.real_registration import register_products
@@ -152,6 +191,18 @@ def register_cli(
     }
     result = register_products(source_product, reference_product, output_dir=output_dir, config=config)
     res_dict = result.to_dict()
+
+    chk_eval = None
+    if checkpoints_path and Path(checkpoints_path).is_file():
+        from samanvaya.validation.checkpoints import load_checkpoints, evaluate_checkpoints
+        try:
+            chk_pts = load_checkpoints(checkpoints_path)
+            if result.transform_matrix is not None:
+                chk_eval = evaluate_checkpoints(result.transform_matrix, chk_pts)
+                res_dict["independent_checkpoints"] = chk_eval
+        except Exception as exc:
+            res_dict["independent_checkpoints_error"] = str(exc)
+
     if json_output:
         print(json.dumps(res_dict, indent=2, default=str))
     else:
@@ -168,6 +219,10 @@ def register_cli(
         print(f"Transform Model: {result.transform_model}")
         if result.residual_statistics:
             print(f"Reprojection Consensus RMSE: {result.residual_statistics.get('reprojection_rmse_px', 'N/A')} px")
+        if chk_eval and chk_eval.get("status") == "READY":
+            print(f"Independent Checkpoint RMSE: {chk_eval.get('rmse_pixels', 'N/A')} px ({chk_eval.get('checkpoint_count', 0)} checkpoints)")
+            isro_ok = chk_eval.get('rmse_pixels', 999.0) < 0.40
+            print(f"Meets ISRO Mandate (< 0.40 px): {isro_ok}")
         if result.registered_output:
             print(f"Registered Output: {result.registered_output}")
         if result.failure_reason:
@@ -317,7 +372,15 @@ def main(argv: list[str] | None = None) -> int:
     reg.add_argument("--strategy", default="auto", choices=["auto", "loftr", "sift", "phase_correlation", "rift"], help="Matcher strategy")
     reg.add_argument("--transform", default="homography", choices=["translation", "similarity", "affine", "homography", "auto"], help="Geometric transformation model")
     reg.add_argument("--no-subpixel", dest="subpixel", action="store_false", default=True, help="Disable analytical subpixel refinement")
+    reg.add_argument("--checkpoints", default=None, help="Optional CSV or JSON file of independent validation checkpoints")
     reg.add_argument("--json", action="store_true", help="Emit registration result as JSON")
+
+    # discover-pairs
+    disc_pairs = subparsers.add_parser("discover-pairs", help="Discover and rank candidate overlapping product pairs across missions")
+    disc_pairs.add_argument("--root", default="data", help="Root directory to scan for planetary products (default: data)")
+    disc_pairs.add_argument("--out", default=None, help="Optional output JSON path for the discovery manifest")
+    disc_pairs.add_argument("--min-overlap", type=float, default=0.05, help="Minimum overlap ratio threshold (default: 0.05)")
+    disc_pairs.add_argument("--json", action="store_true", help="Emit discovery manifest as JSON to stdout")
 
     # validate
     val = subparsers.add_parser("validate", help="Validate pair overlap or registration quality")
@@ -364,7 +427,19 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "register":
-        register_cli(args.source, args.reference, output_dir=args.output_dir, strategy=args.strategy, transform=args.transform, subpixel=args.subpixel, json_output=args.json)
+        register_cli(
+            args.source,
+            args.reference,
+            output_dir=args.output_dir,
+            strategy=args.strategy,
+            transform=args.transform,
+            subpixel=args.subpixel,
+            checkpoints_path=args.checkpoints,
+            json_output=args.json,
+        )
+        return 0
+    if args.command == "discover-pairs":
+        discover_pairs_cli(root=args.root, out=args.out, min_overlap=args.min_overlap, json_output=args.json)
         return 0
     if args.command == "validate":
         validate_cli(args.source, reference=args.reference, root=args.root, json_output=args.json)
