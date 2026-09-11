@@ -101,9 +101,10 @@ class LunarCorePipeline:
         try:
             initial_matches = self.dense_matcher.match_patches(roi.ref_roi, roi.target_roi)
         except RuntimeError as exc:
-            if "out of memory" not in str(exc).lower() and "cuda" not in str(exc).lower():
+            err_text = str(exc).lower()
+            if "out of memory" not in err_text and "cuda" not in err_text and "model_weights_unavailable" not in err_text:
                 raise
-            logger.warning("Dense LoFTR failed with a memory error; switching to Classical RIFT fallback: %s", exc)
+            logger.warning("Dense LoFTR failed (%s); switching to Classical RIFT fallback.", exc)
             initial_matches = []
 
         # Map matcher coordinates from the common aligned ROI back to each original image.
@@ -155,8 +156,14 @@ class LunarCorePipeline:
                     pc_tgt.max_moment,
                     pc_tgt.orientation_max_idx,
                 )
-                matrix, inliers = self.estimator.estimate(rift_matches, self.trans_type)
-                logger.info("Matcher path: %s (%d inliers).", matcher_path, len(inliers))
+                global_matches = rift_matches
+                allocated_matches = (
+                    self.anms.cap_grid_cells(global_matches, target_image.shape, cap_per_cell=4, use_source_coords=True)
+                    if self.enable_anms and global_matches
+                    else global_matches
+                )
+                matrix, inliers = self.estimator.estimate(allocated_matches, self.trans_type)
+                logger.info("Matcher path: %s (%d inliers from %d matches).", matcher_path, len(inliers), len(global_matches))
             except Exception:
                 logger.exception("Classical RIFT fallback failed; returning an empty registration result.")
                 matcher_path = "classical_rift_failed"
@@ -201,22 +208,40 @@ class LunarCorePipeline:
                             ]
                             matrix = refined_mat
             elif self.trans_type == TransformationType.HOMOGRAPHY:
-                refined_mat, _ = cv2.findHomography(src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=1.5)
-                if refined_mat is not None:
-                    matrix = refined_mat
-                    inliers = [
-                        KeypointMatch(
-                            ref_xy=m.ref_xy,
-                            target_xy=m.target_xy,
-                            confidence=m.confidence,
-                            subpixel_refined=True,
-                            residual_error=m.residual_error,
-                            source_frame="FULL_SOURCE_IMAGE",
-                            reference_frame="FULL_REFERENCE_IMAGE",
-                        )
-                        for m in refined_inliers
-                    ]
-
+                method = getattr(cv2, "USAC_MAGSAC", cv2.RANSAC)
+                refined_mat, mask = cv2.findHomography(
+                    src_pts, dst_pts, method=method, ransacReprojThreshold=1.5, maxIters=5000, confidence=0.999
+                )
+                if refined_mat is not None and mask is not None:
+                    inlier_idx = np.where(mask.ravel() == 1)[0]
+                    if len(inlier_idx) >= 4:
+                        matrix = refined_mat
+                        recomputed_inliers = []
+                        for idx in inlier_idx:
+                            m = refined_inliers[idx]
+                            pt_h = np.array([m.target_xy[0], m.target_xy[1], 1.0], dtype=np.float64)
+                            proj = refined_mat @ pt_h
+                            if abs(proj[2]) > 1e-8:
+                                proj_xy = (proj[0] / proj[2], proj[1] / proj[2])
+                                res = float(np.sqrt((proj_xy[0] - m.ref_xy[0]) ** 2 + (proj_xy[1] - m.ref_xy[1]) ** 2))
+                            else:
+                                res = float(np.linalg.norm(np.array(m.ref_xy) - np.array(m.target_xy)))
+                            recomputed_inliers.append(
+                                KeypointMatch(
+                                    ref_xy=m.ref_xy,
+                                    target_xy=m.target_xy,
+                                    confidence=m.confidence,
+                                    subpixel_refined=True,
+                                    residual_error=res,
+                                    sigma_x=m.sigma_x,
+                                    sigma_y=m.sigma_y,
+                                    cov_xy=m.cov_xy,
+                                    weight=m.weight,
+                                    source_frame="FULL_SOURCE_IMAGE",
+                                    reference_frame="FULL_REFERENCE_IMAGE",
+                                )
+                            )
+                        inliers = recomputed_inliers
 
         # Step 8: Warping target into reference coordinate frame
         warped: Optional[np.ndarray] = None
@@ -232,6 +257,7 @@ class LunarCorePipeline:
             total_matches=len(global_matches),
             inliers=inliers,
             image_shape=ref_image.shape,
+            homography=matrix,
             processing_time_ms=elapsed_ms,
         )
 

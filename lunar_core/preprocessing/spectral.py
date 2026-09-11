@@ -105,6 +105,57 @@ class HyperspectralBandSelector:
             return np.transpose(arr, (2, 0, 1))
         return arr
 
+    def filter_bad_bands_and_pixels(
+        self,
+        cube: np.ndarray,
+        max_nan_ratio: float = 0.40,
+        min_variance: float = 1e-7,
+    ) -> tuple[np.ndarray, list[int], dict[str, Any]]:
+        """Filter out dead, saturated, or high-noise hyperspectral channels and clean sparse invalid pixels."""
+        arr = self._standardize_cube_layout(cube)
+        bands, height, width = arr.shape
+        total_pixels = height * width
+
+        kept_indices: list[int] = []
+        cleaned_bands: list[np.ndarray] = []
+
+        for b in range(bands):
+            band_slice = arr[b]
+            nan_count = int(np.count_nonzero(~np.isfinite(band_slice)))
+            if nan_count / max(total_pixels, 1) > max_nan_ratio:
+                continue
+
+            valid_mask = np.isfinite(band_slice)
+            if not np.any(valid_mask):
+                continue
+
+            var = float(np.var(band_slice[valid_mask]))
+            if var < min_variance:
+                continue
+
+            # Fill remaining sparse non-finite pixels with median of valid regolith pixels
+            median_val = float(np.median(band_slice[valid_mask]))
+            clean_slice = np.where(valid_mask, band_slice, median_val).astype(np.float32)
+            cleaned_bands.append(clean_slice)
+            kept_indices.append(b)
+
+        if not cleaned_bands:
+            # Fallback to zero-filled band if all bands were degenerate
+            cleaned_cube = np.zeros((1, height, width), dtype=np.float32)
+            kept_indices = [0]
+        else:
+            cleaned_cube = np.stack(cleaned_bands, axis=0)
+
+        metadata = {
+            "total_bands_input": bands,
+            "bands_retained": len(kept_indices),
+            "retained_indices": kept_indices,
+            "discarded_band_count": bands - len(kept_indices),
+            "max_nan_threshold": max_nan_ratio,
+            "min_variance_threshold": min_variance,
+        }
+        return cleaned_cube, kept_indices, metadata
+
     def get_band_indices_for_range(
         self, min_nm: float = 1000.0, max_nm: float = 1250.0
     ) -> np.ndarray:
@@ -123,9 +174,15 @@ class HyperspectralBandSelector:
         max_nm: float = 1250.0,
         normalize: bool = True,
     ) -> np.ndarray:
-        selected = self._standardize_cube_layout(cube)[
-            self.get_band_indices_for_range(min_nm, max_nm)
-        ]
+        clean_cube, kept, _ = self.filter_bad_bands_and_pixels(cube)
+        if self.wavelengths is not None and len(self.wavelengths) == self._standardize_cube_layout(cube).shape[0]:
+            sub_wavelengths = np.asarray(self.wavelengths)[kept]
+            indices = np.where((sub_wavelengths >= min_nm) & (sub_wavelengths <= max_nm))[0]
+            if len(indices) == 0:
+                indices = np.array([int(np.argmin(np.abs(sub_wavelengths - 0.5 * (min_nm + max_nm))))])
+            selected = clean_cube[indices]
+        else:
+            selected = clean_cube
         continuum = np.nanmean(selected, axis=0)
         if not normalize:
             return continuum.astype(np.float32)
@@ -137,8 +194,16 @@ class HyperspectralBandSelector:
     def extract_pca_structural_band(
         self, cube: np.ndarray, subsample_ratio: float = 1.0, normalize: bool = True
     ) -> np.ndarray:
-        bands, height, width = self._standardize_cube_layout(cube).shape
-        flat = self._standardize_cube_layout(cube).reshape(bands, -1).T
+        clean_cube, kept, _ = self.filter_bad_bands_and_pixels(cube)
+        bands, height, width = clean_cube.shape
+        if bands == 1:
+            img = clean_cube[0]
+            if not normalize:
+                return img.astype(np.float32)
+            p1, p99 = float(np.nanpercentile(img, 1.0)), float(np.nanpercentile(img, 99.0))
+            return np.nan_to_num(np.clip((img - p1) / max(p99 - p1, 1e-5), 0.0, 1.0), nan=0.5).astype(np.float32)
+
+        flat = clean_cube.reshape(bands, -1).T
         valid = np.all(np.isfinite(flat), axis=1)
         if not np.any(valid):
             return np.zeros((height, width), dtype=np.float32)
@@ -148,11 +213,15 @@ class HyperspectralBandSelector:
         sample = centered
         if subsample_ratio < 1.0 and len(centered) > 1000:
             sample = centered[:: max(1, int(1.0 / subsample_ratio))]
-        _, eigenvectors = np.linalg.eigh(np.cov(sample, rowvar=False))
+        cov = np.cov(sample, rowvar=False)
+        if cov.ndim == 0 or cov.size == 1:
+            eigenvectors = np.ones((1, 1), dtype=np.float32)
+        else:
+            _, eigenvectors = np.linalg.eigh(cov)
         projection = np.dot(flat - mean, eigenvectors[:, -1])
-        mean_spatial = np.nanmean(self._standardize_cube_layout(cube), axis=0).ravel()
-        correlation = np.corrcoef(projection[valid], mean_spatial[valid])[0, 1]
-        if correlation < 0:
+        mean_spatial = np.nanmean(clean_cube, axis=0).ravel()
+        correlation = np.corrcoef(projection[valid], mean_spatial[valid])[0, 1] if len(clean) > 2 else 1.0
+        if not np.isnan(correlation) and correlation < 0:
             projection = -projection
         image = projection.reshape(height, width)
         if not normalize:
@@ -162,7 +231,43 @@ class HyperspectralBandSelector:
         normalized = np.clip((image - p1) / max(p99 - p1, 1e-5), 0.0, 1.0)
         return np.nan_to_num(normalized, nan=0.5).astype(np.float32)
 
+    def extract_2d_registration_representation(
+        self,
+        cube: np.ndarray,
+        method: str = "auto",
+        normalize: bool = True,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Extract a scientifically defensible 2-D registration image with provenance matching PS 26166."""
+        clean_cube, kept_indices, filter_meta = self.filter_bad_bands_and_pixels(cube)
+        can_do_continuum = (
+            self.wavelengths is not None
+            and len(self.wavelengths) == self._standardize_cube_layout(cube).shape[0]
+        )
+
+        if method == "continuum" or (method == "auto" and can_do_continuum):
+            image = self.extract_continuum_band(clean_cube, normalize=normalize)
+            prov = {
+                "representation_type": "continuum_band_mean",
+                "bands_used": kept_indices,
+                "dimensionality_reduction": "continuum_window_average",
+                "spectral_preprocessing": "bad_pixel_and_dead_band_filtering",
+                "wavelength_range_nm": [1000.0, 1250.0],
+                "filter_audit": filter_meta,
+            }
+        else:
+            image = self.extract_pca_structural_band(clean_cube, normalize=normalize)
+            prov = {
+                "representation_type": "robust_pca_structural_band",
+                "bands_used": kept_indices,
+                "dimensionality_reduction": "PCA_first_principal_component",
+                "spectral_preprocessing": "bad_pixel_and_dead_band_filtering",
+                "filter_audit": filter_meta,
+            }
+
+        return image, prov
+
     def extract_optimal_structural_band(self, cube: np.ndarray, method: str = "continuum") -> np.ndarray:
         if method.lower() == "pca":
             return self.extract_pca_structural_band(cube)
         return self.extract_continuum_band(cube)
+

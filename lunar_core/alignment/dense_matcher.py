@@ -36,6 +36,9 @@ class DenseLoFTRResult:
     warped_source: Optional[np.ndarray]
     all_matches: List[KeypointMatch]
     anms_matches: List[KeypointMatch]
+    learned_weights_used: bool = True
+    weight_source: str = "outdoor"
+    model_provenance: Optional[dict[str, Any]] = None
 
     def __iter__(self) -> Iterator[Union[List[KeypointMatch], Optional[np.ndarray]]]:
         """Supports tuple unpacking: inliers, H, warped_source = result"""
@@ -72,17 +75,38 @@ class DenseLoFTRMatcher:
             self.device = torch.device(device)
 
         # Initialize LoFTR backbone
+        self.model_name = "LoFTR"
+        self.model_version = "kornia_loftr"
+        self.precision = "float32"
+        self.weight_load_error = None
+        self.weight_checksum = None
         try:
             self.loftr = KF.LoFTR(pretrained=pretrained).to(self.device)
             self.is_pretrained = pretrained is not None
+            self.weight_source = str(pretrained) if pretrained is not None else "NONE"
+            self.weight_status = "LOADED" if self.is_pretrained else "EXPLICIT_NONE"
+            # Attempt to record weight checksum if checkpoint exists in torch cache
+            try:
+                import hashlib
+                from pathlib import Path
+                ckpt_path = Path.home() / ".cache" / "torch" / "hub" / "checkpoints" / "loftr_outdoor.ckpt"
+                if ckpt_path.is_file():
+                    with open(ckpt_path, "rb") as f:
+                        self.weight_checksum = hashlib.sha256(f.read()).hexdigest()
+            except Exception:
+                pass
+            self.loftr.eval()
         except Exception as exc:
+            self.weight_load_error = str(exc)
             logger.warning(
-                "LoFTR pretrained weights failed to load (%s); untrained random "
-                "weights are being used and results are not meaningful.",
+                "LoFTR pretrained weights failed to load (%s); refusing to silently "
+                "initialize untrained random weights for scientific registration.",
                 exc,
             )
-            self.loftr = KF.LoFTR(pretrained=None).to(self.device)
-        self.loftr.eval()
+            self.loftr = None
+            self.is_pretrained = False
+            self.weight_source = "UNAVAILABLE"
+            self.weight_status = "MODEL_WEIGHTS_UNAVAILABLE"
 
     @staticmethod
     def prepare_geotiff_array(image: np.ndarray) -> Tuple[torch.Tensor, np.ndarray]:
@@ -128,9 +152,12 @@ class DenseLoFTRMatcher:
         src_shape: Tuple[int, int],
         ref_shape: Tuple[int, int],
     ) -> List[KeypointMatch]:
-        """
-        Extracts dense cross-attention correspondences using LoFTR.
-        """
+        if self.loftr is None or self.weight_status == "MODEL_WEIGHTS_UNAVAILABLE":
+            raise RuntimeError(
+                "MODEL_WEIGHTS_UNAVAILABLE: Pretrained LoFTR weights could not be loaded; "
+                "refusing to generate ungrounded random matches."
+            )
+
         source_tensor = source_tensor.to(self.device)
         ref_tensor = ref_tensor.to(self.device)
 
@@ -286,24 +313,25 @@ class DenseLoFTRMatcher:
                 if abs(dx_star) <= 1.0 and abs(dy_star) <= 1.0:
                     refined_sx = float(m.target_xy[0] + dx_star)
                     refined_sy = float(m.target_xy[1] + dy_star)
-                    sigma_x = float(np.sqrt(abs((2.0 * b) / det_h)))
-                    sigma_y = float(np.sqrt(abs((2.0 * a) / det_h)))
-                    cov_xy = float(-c / det_h)
-                    weight = float(np.sqrt(det_h))
-                    refined_list.append(
-                        KeypointMatch(
-                            ref_xy=m.ref_xy,
-                            target_xy=(refined_sx, refined_sy),
-                            confidence=m.confidence,
-                            subpixel_refined=True,
-                            residual_error=m.residual_error,
-                            sigma_x=sigma_x,
-                            sigma_y=sigma_y,
-                            cov_xy=cov_xy,
-                            weight=weight,
+                    if np.isfinite(refined_sx) and np.isfinite(refined_sy) and 0.0 <= refined_sx < float(sw) and 0.0 <= refined_sy < float(sh):
+                        sigma_x = float(np.sqrt(abs((2.0 * b) / det_h)))
+                        sigma_y = float(np.sqrt(abs((2.0 * a) / det_h)))
+                        cov_xy = float(-c / det_h)
+                        weight = float(np.sqrt(det_h))
+                        refined_list.append(
+                            KeypointMatch(
+                                ref_xy=m.ref_xy,
+                                target_xy=(refined_sx, refined_sy),
+                                confidence=m.confidence,
+                                subpixel_refined=True,
+                                residual_error=None,
+                                sigma_x=sigma_x,
+                                sigma_y=sigma_y,
+                                cov_xy=cov_xy,
+                                weight=weight,
+                            )
                         )
-                    )
-                    continue
+                        continue
 
             refined_list.append(m)
 
@@ -404,6 +432,18 @@ class DenseLoFTRMatcher:
             warped_source=warped,
             all_matches=raw_matches,
             anms_matches=anms_matches,
+            learned_weights_used=self.is_pretrained,
+            weight_source=self.weight_source,
+            model_provenance={
+                "model_name": self.model_name,
+                "model_version": self.model_version,
+                "weight_source": self.weight_source,
+                "weight_status": self.weight_status,
+                "weight_checksum": self.weight_checksum,
+                "device": str(self.device),
+                "precision": self.precision,
+                "learned_weights_used": self.is_pretrained,
+            },
         )
 
 

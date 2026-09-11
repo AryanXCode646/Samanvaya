@@ -23,6 +23,7 @@ class IdentificationMethod(str, Enum):
     """How mission/instrument identity was obtained. Heuristic is never silent."""
 
     PDS4_METADATA = "pds4_metadata"
+    PDS3_METADATA = "pds3_metadata"
     PRODUCT_IDENTIFIER = "product_identifier"
     MISSION_SPECIFIC_IDENTIFIER = "mission_specific_identifier"
     FILENAME_HEURISTIC = "filename_heuristic"

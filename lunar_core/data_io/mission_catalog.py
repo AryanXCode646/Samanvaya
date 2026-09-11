@@ -46,10 +46,7 @@ def _first_value(root: Any, *names: str) -> Optional[str]:
     return None
 
 
-def _read_label(label_path: Path) -> Any:
-    from defusedxml import ElementTree
-
-    return ElementTree.parse(label_path).getroot()
+from lunar_core.data_io.product_identity import PDS3Label, _read_label
 
 
 def _header_metadata(image_path: Path, label_root: Any) -> dict[str, Any]:
@@ -201,42 +198,78 @@ def inspect_product(image_path: Path, root_dir: Optional[Path] = None) -> Missio
             product.mission = mission
             product.instrument = instrument
             product.identification_method = method.value
-            sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
-                label_path, allowed_dir=label_path.parent
-            )
-            product.gsd_m = gsd
-            if _first_value(label_root, "pixel_resolution", "ground_sample_distance", "gsd", "resolution"):
-                product.gsd_source = "pds4"
-            elif modality != SensorModality.SYNTHETIC:
-                product.gsd_source = "instrument_default"
-            else:
-                product.gsd_source = "unknown"
-            if sun is not None:
-                product.sun_azimuth_deg = sun.azimuth_deg
-                product.sun_elevation_deg = sun.elevation_deg
-                product.sun_geometry_source = "pds4"
-            else:
-                product.sun_geometry_source = "unknown"
-            product.center_lat_deg, product.center_lon_deg = _center_coordinates(label_root)
-            product.footprint = _footprint_from_coordinates(label_root)
-            if product.footprint is not None:
-                product.footprint_status = "APPROXIMATE"
-                product.geometry_method = "lat_lon_bounding_box_prefilter"
-            product.metadata_source = str(label_path)
-            product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
-            product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
-            product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(
-                label_root, "product_type"
-            )
-            if (product.band_count or 0) > 1:
-                product.status = ProductStatus.PARTIAL
-                product.validation_status = ProductStatus.PARTIAL.value
-                product.validation_message = (
-                    "Spectral cube metadata parsed; 2-D registration representation is not implemented."
-                )
-            else:
+            if isinstance(label_root, PDS3Label):
+                map_scale = label_root.get("MAP_SCALE")
+                if map_scale:
+                    try:
+                        product.gsd_m = float(map_scale)
+                        product.gsd_source = "pds3"
+                    except ValueError:
+                        pass
+                min_lat = label_root.get("MINIMUM_LATITUDE")
+                max_lat = label_root.get("MAXIMUM_LATITUDE")
+                min_lon = label_root.get("WESTERNMOST_LONGITUDE")
+                max_lon = label_root.get("EASTERNMOST_LONGITUDE")
+                if all(v is not None for v in (min_lat, max_lat, min_lon, max_lon)):
+                    try:
+                        la0, la1, lo0, lo1 = float(min_lat), float(max_lat), float(min_lon), float(max_lon)
+                        product.footprint = [(lo0, la0), (lo1, la0), (lo1, la1), (lo0, la1)]
+                        product.footprint_status = "APPROXIMATE"
+                        product.geometry_method = "pds3_bounding_corners"
+                        product.center_lat_deg = (la0 + la1) / 2.0
+                        product.center_lon_deg = (lo0 + lo1) / 2.0
+                    except ValueError:
+                        pass
+                inc_ang = label_root.get("INCIDENCE_ANGLE")
+                if inc_ang:
+                    try:
+                        product.incidence_angle_deg = float(inc_ang)
+                        product.sun_elevation_deg = 90.0 - float(inc_ang)
+                        product.sun_geometry_source = "pds3"
+                    except ValueError:
+                        pass
+                product.acquisition_time = label_root.get("START_TIME") or label_root.get("PRODUCT_CREATION_TIME")
+                product.processing_level = label_root.get("PRODUCT_TYPE")
+                product.metadata_source = str(label_path)
                 product.status = ProductStatus.VALIDATED
                 product.validation_status = ProductStatus.VALIDATED.value
+            else:
+                sun, gsd, modality = PlanetaryRasterReader.parse_pds4_metadata(
+                    label_path, allowed_dir=label_path.parent
+                )
+                product.gsd_m = gsd
+                if _first_value(label_root, "pixel_resolution", "ground_sample_distance", "gsd", "resolution"):
+                    product.gsd_source = "pds4"
+                elif modality != SensorModality.SYNTHETIC:
+                    product.gsd_source = "instrument_default"
+                else:
+                    product.gsd_source = "unknown"
+                if sun is not None:
+                    product.sun_azimuth_deg = sun.azimuth_deg
+                    product.sun_elevation_deg = sun.elevation_deg
+                    product.sun_geometry_source = "pds4"
+                else:
+                    product.sun_geometry_source = "unknown"
+                product.center_lat_deg, product.center_lon_deg = _center_coordinates(label_root)
+                product.footprint = _footprint_from_coordinates(label_root)
+                if product.footprint is not None:
+                    product.footprint_status = "APPROXIMATE"
+                    product.geometry_method = "lat_lon_bounding_box_prefilter"
+                product.metadata_source = str(label_path)
+                product.acquisition_time = next(iter(_local_values(label_root, "start_date_time")), None)
+                product.processing_level = next(iter(_local_values(label_root, "processing_level")), None)
+                product.product_type = next(iter(_local_values(label_root, "product_class")), None) or _first_value(
+                    label_root, "product_type"
+                )
+                if (product.band_count or 0) > 1:
+                    product.status = ProductStatus.PARTIAL
+                    product.validation_status = ProductStatus.PARTIAL.value
+                    product.validation_message = (
+                        "Spectral cube metadata parsed; 2-D registration representation is partial (continuum/PCA projection supported, full cross-modal correspondence unverified)."
+                    )
+                else:
+                    product.status = ProductStatus.VALIDATED
+                    product.validation_status = ProductStatus.VALIDATED.value
     except Exception as exc:
         product.status = ProductStatus.INVALID
         product.validation_status = ProductStatus.INVALID.value

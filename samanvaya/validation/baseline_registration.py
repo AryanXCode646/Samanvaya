@@ -112,7 +112,10 @@ def run_baseline_registration(
     y_span = float(np.ptp(inlier_ref_pts[:, 1])) if len(inlier_ref_pts) > 1 else 0.0
     coverage = float((x_span * y_span) / max(1.0, w * h))
 
-    # Evaluate RMSE
+    import time
+
+    # Evaluate residuals
+    errors: np.ndarray
     if checkpoints and len(checkpoints) >= 4:
         cp_src = np.array([[cp["source_x"], cp["source_y"]] for cp in checkpoints], dtype=float)
         cp_ref = np.array([[cp["reference_x"], cp["reference_y"]] for cp in checkpoints], dtype=float)
@@ -120,15 +123,19 @@ def run_baseline_registration(
         projected = homogeneous @ H.T
         projected = projected[:, :2] / np.maximum(projected[:, 2:3], 1e-12)
         errors = np.linalg.norm(projected - cp_ref, axis=1)
-        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        evaluation_basis = "held_out_checkpoints"
     else:
-        # Compute inlier reprojection RMSE
+        # Compute inlier reprojection residuals
         inlier_src = src_pts[np.array(inlier_mask) == 1].reshape(-1, 2)
         homogeneous = np.column_stack([inlier_src, np.ones(len(inlier_src))])
         projected = homogeneous @ H.T
         projected = projected[:, :2] / np.maximum(projected[:, 2:3], 1e-12)
         errors = np.linalg.norm(projected - inlier_ref_pts, axis=1)
-        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        evaluation_basis = "inlier_reprojection"
+
+    rmse = float(np.sqrt(np.mean(errors ** 2))) if len(errors) > 0 else None
+    median_err = float(np.median(errors)) if len(errors) > 0 else None
+    p95_err = float(np.percentile(errors, 95)) if len(errors) > 0 else None
 
     return {
         "method": f"baseline_{descriptor_name.lower()}_ransac",
@@ -138,6 +145,83 @@ def run_baseline_registration(
         "inlier_count": inlier_count,
         "inlier_ratio": float(inlier_count / len(good_matches)),
         "rmse_pixels": rmse,
+        "median_error_px": median_err,
+        "p95_error_px": p95_err,
+        "evaluation_basis": evaluation_basis,
         "coverage_fraction": min(1.0, coverage),
         "transform_matrix": H.tolist(),
     }
+
+
+def compare_matchers(
+    source: np.ndarray,
+    reference: np.ndarray,
+    checkpoints: Optional[list[dict[str, Any]]] = None,
+    source_gsd: float = 1.0,
+    reference_gsd: float = 1.0,
+) -> dict[str, Any]:
+    """Execute evidence-based comparison between classical baseline and Samanvaya."""
+    import time
+    from lunar_core.pipeline import LunarCorePipeline
+    from lunar_core.models import TransformationType
+
+    # 1. Classical Baseline
+    t0 = time.perf_counter()
+    baseline_result = run_baseline_registration(source, reference, checkpoints=checkpoints)
+    baseline_time_ms = (time.perf_counter() - t0) * 1000.0
+    baseline_result["runtime_ms"] = baseline_time_ms
+
+    # 2. Samanvaya LoFTR + Phase Congruency
+    t1 = time.perf_counter()
+    pipeline = LunarCorePipeline(transformation_type=TransformationType.HOMOGRAPHY)
+    samanvaya_res = pipeline.register(
+        reference,
+        source,
+        ref_gsd=reference_gsd,
+        target_gsd=source_gsd,
+    )
+    samanvaya_time_ms = (time.perf_counter() - t1) * 1000.0
+
+    sam_raw = len(samanvaya_res.matches)
+    sam_inliers = len(samanvaya_res.inliers)
+    sam_ratio = float(samanvaya_res.metrics.inlier_ratio)
+    sam_rmse = samanvaya_res.metrics.rmse_pixels
+
+    # Checkpoint evaluation for Samanvaya if provided
+    sam_median = None
+    sam_p95 = None
+    if checkpoints and len(checkpoints) >= 4 and samanvaya_res.transform_matrix is not None:
+        cp_src = np.array([[cp["source_x"], cp["source_y"]] for cp in checkpoints], dtype=float)
+        cp_ref = np.array([[cp["reference_x"], cp["reference_y"]] for cp in checkpoints], dtype=float)
+        homo = np.column_stack([cp_src, np.ones(len(cp_src))])
+        proj = homo @ samanvaya_res.transform_matrix.T
+        proj = proj[:, :2] / np.maximum(proj[:, 2:3], 1e-12)
+        res_errs = np.linalg.norm(proj - cp_ref, axis=1)
+        sam_rmse = float(np.sqrt(np.mean(res_errs ** 2)))
+        sam_median = float(np.median(res_errs))
+        sam_p95 = float(np.percentile(res_errs, 95))
+
+    samanvaya_dict = {
+        "method": "samanvaya_loftr_phase_congruency",
+        "status": "SUCCESS" if sam_inliers >= 4 else "NO_CORRESPONDENCE",
+        "raw_match_count": sam_raw,
+        "inlier_count": sam_inliers,
+        "inlier_ratio": sam_ratio,
+        "rmse_pixels": sam_rmse,
+        "median_error_px": sam_median,
+        "p95_error_px": sam_p95,
+        "coverage_fraction": samanvaya_res.metrics.spatial_uniformity_entropy,
+        "runtime_ms": samanvaya_time_ms,
+    }
+
+    return {
+        "comparison_table": {
+            "baseline": baseline_result,
+            "samanvaya": samanvaya_dict,
+        },
+        "summary": {
+            "more_inliers": "samanvaya" if sam_inliers > baseline_result.get("inlier_count", 0) else "baseline",
+            "higher_inlier_ratio": "samanvaya" if sam_ratio > baseline_result.get("inlier_ratio", 0) else "baseline",
+        }
+    }
+

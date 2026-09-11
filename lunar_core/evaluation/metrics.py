@@ -43,7 +43,9 @@ class RegistrationEvaluationReport:
     std_residual_pixels: float
     ce90_pixels: float                      # Circular Error at 90th percentile
     meets_isro_mandate: bool                # RMSE < 0.40 px with >= 4 inliers
+    p95_residual_pixels: float = 0.0        # 95th percentile residual error magnitude
     control_point_rmse_pixels: Optional[float] = None
+    reprojection_consensus_error: Optional[float] = None
     processing_time_ms: float = 0.0
     homography_matrix: Optional[List[List[float]]] = None
     tie_points: List[Dict[str, Any]] = field(default_factory=list)
@@ -120,9 +122,11 @@ class RegistrationEvaluationReport:
                 "spatial_uniformity_entropy": round(self.spatial_uniformity_entropy, 4),
                 "mean_residual_pixels": round(self.mean_residual_pixels, 4),
                 "median_residual_pixels": round(self.median_residual_pixels, 4),
+                "p95_residual_pixels": round(self.p95_residual_pixels, 4),
                 "max_residual_pixels": round(self.max_residual_pixels, 4),
                 "std_residual_pixels": round(self.std_residual_pixels, 4),
                 "ce90_pixels": round(self.ce90_pixels, 4),
+                "reprojection_consensus_error": round(self.reprojection_consensus_error, 4) if self.reprojection_consensus_error is not None else None,
                 "meets_isro_mandate": self.meets_isro_mandate,
                 "mandate_assessment": "ground_truth" if self.ground_truth_available else "not_assessed",
                 "isro_mandate_threshold_px": 0.40,
@@ -534,8 +538,11 @@ class EvaluationEngine:
                 max_res = float(np.max(residuals))
                 std_res = float(np.std(residuals))
                 ce90 = float(np.percentile(residuals, 90))
+                p95 = float(np.percentile(residuals, 95))
+                reproj_err = float(rmse)
             else:
-                mean_res, median_res, max_res, std_res, ce90 = 999.0, 999.0, 999.0, 0.0, 999.0
+                mean_res, median_res, max_res, std_res, ce90, p95 = 999.0, 999.0, 999.0, 0.0, 999.0, 999.0
+                reproj_err = None
 
             # SIH PS 26166 mandate: spatial distribution operates on source / moving image
             entropy = cls.compute_spatial_entropy(src_pts, image_shape, grid_bins=8)
@@ -574,9 +581,10 @@ class EvaluationEngine:
 
             meets_mandate = bool(ground_truth_available and homography is not None and rmse < 0.40 and inlier_count >= 4)
         else:
-            rmse, mean_res, median_res, max_res, std_res, ce90, entropy = (
-                999.0, 999.0, 999.0, 999.0, 0.0, 999.0, 0.0
+            rmse, mean_res, median_res, max_res, std_res, ce90, p95, entropy = (
+                999.0, 999.0, 999.0, 999.0, 0.0, 999.0, 999.0, 0.0
             )
+            reproj_err = None
             tie_points = []
             h_list = None
             spatial_quality = cls.compute_spatial_quality(np.empty((0, 2)), image_shape, grid_bins=8)
@@ -603,8 +611,10 @@ class EvaluationEngine:
             max_residual_pixels=max_res,
             std_residual_pixels=std_res,
             ce90_pixels=ce90,
+            p95_residual_pixels=p95,
             meets_isro_mandate=meets_mandate,
             control_point_rmse_pixels=control_point_rmse,
+            reprojection_consensus_error=reproj_err,
             processing_time_ms=processing_time_ms,
             homography_matrix=h_list,
             tie_points=tie_points,

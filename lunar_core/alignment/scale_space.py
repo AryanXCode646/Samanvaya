@@ -101,23 +101,35 @@ class ScaleSpaceLocalizer:
     ) -> RoiBundle:
         ref_comm, tgt_comm, scale_ratio = cls.resample_to_common_gsd(img_ref, ref_gsd, img_tgt, tgt_gsd)
         rot_deg, scale_est, dx, dy, conf = FourierMellinAligner.estimate_coarse_similarity(ref_comm, tgt_comm)
-
         h_ref, w_ref = ref_comm.shape
-        center = (tgt_comm.shape[1] / 2.0, tgt_comm.shape[0] / 2.0)
-        rot_mat = cv2.getRotationMatrix2D(center, -rot_deg, 1.0 / (scale_est + 1e-6))
-        rot_mat[0, 2] += dx
-        rot_mat[1, 2] += dy
+        if conf >= 0.05:
+            center = (tgt_comm.shape[1] / 2.0, tgt_comm.shape[0] / 2.0)
+            rot_mat = cv2.getRotationMatrix2D(center, -rot_deg, 1.0 / (scale_est + 1e-6))
+            rot_mat[0, 2] += dx
+            rot_mat[1, 2] += dy
 
-        aligned_tgt = cv2.warpAffine(tgt_comm, rot_mat, (w_ref, h_ref), flags=cv2.INTER_LINEAR)
-        mask = (ref_comm > 0).astype(np.uint8) & (aligned_tgt > 0).astype(np.uint8)
+            aligned_tgt = cv2.warpAffine(tgt_comm, rot_mat, (w_ref, h_ref), flags=cv2.INTER_LINEAR)
+            mask = (ref_comm > 0).astype(np.uint8) & (aligned_tgt > 0).astype(np.uint8)
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours:
-            x, y, w, h = cv2.boundingRect(np.vstack(contours))
-            xmin, ymin = max(0, x - padding), max(0, y - padding)
-            xmax, ymax = min(w_ref, x + w + padding), min(h_ref, y + h + padding)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if contours:
+                x, y, w, h = cv2.boundingRect(np.vstack(contours))
+                xmin, ymin = max(0, x - padding), max(0, y - padding)
+                xmax, ymax = min(w_ref, x + w + padding), min(h_ref, y + h + padding)
+            else:
+                xmin, ymin, xmax, ymax = 0, 0, w_ref, h_ref
+            target_to_common_mat = np.vstack([rot_mat, [0.0, 0.0, 1.0]]).astype(np.float64)
         else:
-            xmin, ymin, xmax, ymax = 0, 0, w_ref, h_ref
+            # Low confidence in coarse Fourier-Mellin similarity: retain identity alignment
+            rot_deg = 0.0
+            scale_est = 1.0
+            dx = 0.0
+            dy = 0.0
+            aligned_tgt = np.zeros((h_ref, w_ref), dtype=tgt_comm.dtype)
+            th, tw = min(h_ref, tgt_comm.shape[0]), min(w_ref, tgt_comm.shape[1])
+            aligned_tgt[:th, :tw] = tgt_comm[:th, :tw]
+            xmin, ymin, xmax, ymax = 0, 0, tw, th
+            target_to_common_mat = np.eye(3, dtype=np.float64)
 
         return RoiBundle(
             ref_roi=ref_comm[ymin:ymax, xmin:xmax],
@@ -127,7 +139,7 @@ class ScaleSpaceLocalizer:
             coarse_scale=scale_est * scale_ratio,
             coarse_translation=(dx, dy),
             confidence=conf,
-            target_to_common=np.vstack([rot_mat, [0.0, 0.0, 1.0]]).astype(np.float64),
+            target_to_common=target_to_common_mat,
             reference_common_to_full_scale=scale_ratio if tgt_gsd > ref_gsd else 1.0,
             target_common_to_full_scale=(1.0 / scale_ratio) if tgt_gsd < ref_gsd else 1.0,
         )

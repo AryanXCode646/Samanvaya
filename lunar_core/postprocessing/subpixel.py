@@ -278,6 +278,7 @@ class ParabolicHessianRefiner(SubpixelRefinerBase):
     ) -> List[KeypointMatch]:
         refined: List[KeypointMatch] = []
         rh, rw = ref_moment.shape
+        th, tw = tgt_moment.shape
         r = patch_radius
 
         for m in matches:
@@ -310,20 +311,21 @@ class ParabolicHessianRefiner(SubpixelRefinerBase):
                     int_offset_y = peak_y - 2
                     refined_tx = float(m.target_xy[0] + int_offset_x + dx)
                     refined_ty = float(m.target_xy[1] + int_offset_y + dy)
-                    refined.append(
-                        KeypointMatch(
-                            ref_xy=m.ref_xy,
-                            target_xy=(refined_tx, refined_ty),
-                            confidence=m.confidence,
-                            subpixel_refined=True,
-                            residual_error=m.residual_error,
-                            sigma_x=fit.sigma_x,
-                            sigma_y=fit.sigma_y,
-                            cov_xy=fit.cov_xy,
-                            weight=fit.weight,
+                    if np.isfinite(refined_tx) and np.isfinite(refined_ty) and 0.0 <= refined_tx < float(tw) and 0.0 <= refined_ty < float(th):
+                        refined.append(
+                            KeypointMatch(
+                                ref_xy=m.ref_xy,
+                                target_xy=(refined_tx, refined_ty),
+                                confidence=m.confidence,
+                                subpixel_refined=True,
+                                residual_error=None,
+                                sigma_x=fit.sigma_x,
+                                sigma_y=fit.sigma_y,
+                                cov_xy=fit.cov_xy,
+                                weight=fit.weight,
+                            )
                         )
-                    )
-                    continue
+                        continue
 
             refined.append(m)
 
